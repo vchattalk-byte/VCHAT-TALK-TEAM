@@ -37,8 +37,4 @@ public class MessageDTO {
     @JsonProperty("roomId")
     private String roomId;
 
-    // loại phòng: GLOBAL, PUBLIC, PRIVATE
-    @JsonProperty("roomType")
-    private RoomType roomType;  // GLOBAL, PUBLIC, PRIVATE
-
 }
