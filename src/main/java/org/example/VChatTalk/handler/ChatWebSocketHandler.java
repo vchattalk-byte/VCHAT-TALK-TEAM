@@ -19,6 +19,7 @@ import java.util.Set;
 @Slf4j
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
+
     private static final Set<WebSocketSession> sessions =
             Collections.synchronizedSet(new HashSet<>());
 
