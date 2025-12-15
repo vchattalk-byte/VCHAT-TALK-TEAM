@@ -1,5 +1,6 @@
 package org.example.VChatTalk.config;
 
+import org.example.VChatTalk.Service.SessionRegistry;
 import org.example.VChatTalk.handler.ChatWebSocketHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
