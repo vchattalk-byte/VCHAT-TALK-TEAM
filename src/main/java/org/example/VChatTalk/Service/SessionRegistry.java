@@ -1,13 +1,18 @@
 package org.example.VChatTalk.Service;
 
-import org.example.VChatTalk.config.WebSocketConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Component
 public class SessionRegistry {
-    private ConcurrentHashMap<String, WebSocketSession> sessions= new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WebSocketSession> sessions= new ConcurrentHashMap<>();
+    private static final Logger logger = LoggerFactory.getLogger(SessionRegistry.class);
+
 
     public void addSession(WebSocketSession session){
         if(session != null && session.getId()!=null){
@@ -15,7 +20,7 @@ public class SessionRegistry {
         }
     }
 
-    public void removeSessions(String sessionId) {
+    public void removeSession(String sessionId) {
         if(sessionId != null){
             sessions.remove(sessionId);
         }
@@ -34,10 +39,10 @@ public class SessionRegistry {
         return sessions.size();
     }
     public void logActiveSessions(){
-        StringBuilder sb = new StringBuilder("Active Sessions (" + getSessionCount()+ "): ");
+        StringBuilder sb = new StringBuilder();
         for (WebSocketSession s : sessions.values()){
             sb.append(s.getId()).append(s.isOpen() ? "[open]":"[close]").append(" ");
         }
-        System.out.println(sb.toString().trim()) ;
+        logger.info("Active Sessions ({}): {} ", getSessionCount(),sb.toString().trim()); ;
     }
 }

@@ -11,8 +11,12 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
-    private final SessionRegistry sessionRegistry = new SessionRegistry();
+    private final SessionRegistry sessionRegistry;
     private static final Logger logger = LoggerFactory.getLogger(ChatWebSocketHandler.class);
+
+    public ChatWebSocketHandler(SessionRegistry sessionRegistry) {
+        this.sessionRegistry = sessionRegistry;
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -25,7 +29,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        sessionRegistry.removeSessions(session.getId());
+        sessionRegistry.removeSession(session.getId());
         logger.info("Session disconnected: [{}] with status {}", session.getId(), status.getCode());
         sessionRegistry.logActiveSessions();
     }
