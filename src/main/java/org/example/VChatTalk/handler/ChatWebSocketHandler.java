@@ -23,7 +23,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.addSession(session);
         logger.info("New connection established. Session ID: {}", session.getId());
         session.sendMessage(new TextMessage("Welcome! You are connected to the chat server."));
-        sessionRegistry.getSessionCount();
+        sessionRegistry.countSessions();
 
     }
 
@@ -31,7 +31,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         sessionRegistry.removeSession(session.getId());
         logger.info("Session disconnected: [{}] with status {}", session.getId(), status.getCode());
-        sessionRegistry.getSessionCount();
+        sessionRegistry.countSessions();
     }
 
     @Override

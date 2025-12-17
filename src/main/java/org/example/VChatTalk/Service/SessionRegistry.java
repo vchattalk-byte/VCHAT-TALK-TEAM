@@ -35,7 +35,7 @@ public class SessionRegistry {
     public Collection<WebSocketSession> getAllSessions(){
         return sessions.values();
     }
-    public void getSessionCount(){
-        logger.info("Active session({})", sessions.size());
+    public void countSessions(){
+        logger.info("Active sessions({})", sessions.size());
     }
 }
