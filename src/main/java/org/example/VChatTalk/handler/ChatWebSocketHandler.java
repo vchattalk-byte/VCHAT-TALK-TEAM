@@ -1,18 +1,18 @@
 package org.example.VChatTalk.handler;
 
-<<<<<<< HEAD
+
 import org.example.VChatTalk.Service.SessionRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
-=======
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.example.VChatTalk.model.MessageDTO;
 
->>>>>>> origin/feature/Implement-Text-Message-Handling
+
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.CloseStatus;
@@ -29,10 +29,10 @@ import java.util.Set;
 
 @Slf4j
 public class ChatWebSocketHandler extends TextWebSocketHandler {
-<<<<<<< HEAD
+
     private final SessionRegistry sessionRegistry;
     private static final Logger logger = LoggerFactory.getLogger(ChatWebSocketHandler.class);
-=======
+
     private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
     private static final long LIMIT_MS = 200; //
 
@@ -44,21 +44,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 
->>>>>>> origin/feature/Implement-Text-Message-Handling
+
 
     public ChatWebSocketHandler(SessionRegistry sessionRegistry) {
         this.sessionRegistry = sessionRegistry;
     }
 
     @Override
-<<<<<<< HEAD
+
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         sessionRegistry.addSession(session);
         logger.info("New connection established. Session ID: {}", session.getId());
         session.sendMessage(new TextMessage("Welcome! You are connected to the chat server."));
         sessionRegistry.logActiveSessions();
 
-=======
+
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
 
         long now = System.currentTimeMillis();
@@ -103,8 +103,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         broadcast(dto);
     }
 
-
-
     private void broadcast(MessageDTO dto) {
         try {
             String json = objectMapper.writeValueAsString(dto);
@@ -125,12 +123,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         } catch (IOException e) {
             log.error("[ERROR] Broadcasting message failed: {}", e.getMessage(), e);
         }
->>>>>>> origin/feature/Implement-Text-Message-Handling
+
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-<<<<<<< HEAD
+
         sessionRegistry.removeSession(session.getId());
         logger.info("Session disconnected: [{}] with status {}", session.getId(), status.getCode());
         sessionRegistry.logActiveSessions();
@@ -140,10 +138,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         logger.info("Received message from [{}]: {}", session.getId(), message.getPayload());
         session.sendMessage(new TextMessage("Echo: " + message.getPayload()));
-=======
+
         sessions.remove(session);
         log.info("[DISCONNECT] Session disconnected: [{}] with status {}. Total sessions: {}",
                 session.getId(), status.getCode(), sessions.size());
->>>>>>> origin/feature/Implement-Text-Message-Handling
     }
 }
