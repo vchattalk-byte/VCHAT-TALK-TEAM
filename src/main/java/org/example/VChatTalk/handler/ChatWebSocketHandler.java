@@ -17,8 +17,11 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.Set;
 
+
 @Slf4j
 public class ChatWebSocketHandler extends TextWebSocketHandler {
+    private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
+    private static final long LIMIT_MS = 200; //
 
     private static final Set<WebSocketSession> sessions =
             ConcurrentHashMap.newKeySet();
@@ -27,8 +30,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
+
+
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+
+        long now = System.currentTimeMillis();
+        Long last = lastMessageTime.get(session.getId());
+        if (last != null && now - last < LIMIT_MS) {
+            log.warn("[RATE_LIMIT] Session {} sending too fast", session.getId());
+            return;
+        }
+        lastMessageTime.put(session.getId(), now);
 
         String payload = message.getPayload();
 
@@ -39,6 +52,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
 
             dto = objectMapper.readValue(payload, MessageDTO.class);
+            if (dto.getSender() == null || dto.getSender().isBlank()) {
+                dto.setSender("Anonymous");
+            }
+            if (dto.getContent() == null || dto.getContent().isBlank()) {
+                log.warn("[VALIDATION] Empty message from [{}], ignored", session.getId());
+                return;
+            }
+
             log.info("[PARSE] Parsed message DTO: {}", dto);
         } catch (Exception e) {
             log.warn(
