@@ -35,14 +35,7 @@ public class SessionRegistry {
     public Collection<WebSocketSession> getAllSessions(){
         return sessions.values();
     }
-    public int getSessionCount(){
-        return sessions.size();
-    }
-    public void logActiveSessions(){
-        StringBuilder sb = new StringBuilder();
-        for (WebSocketSession s : sessions.values()){
-            sb.append(s.getId()).append(s.isOpen() ? "[open]":"[close]").append(" ");
-        }
-        logger.info("Active Sessions ({}): {} ", getSessionCount(),sb.toString().trim()); ;
+    public void getSessionCount(){
+        logger.info("Active session({})", sessions.size());
     }
 }
