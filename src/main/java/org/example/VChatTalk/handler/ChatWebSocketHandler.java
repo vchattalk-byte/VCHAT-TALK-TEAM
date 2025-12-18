@@ -48,16 +48,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessions.add(session); // add for broadcast
         logger.info("New connection established. Session ID: {}", session.getId());
         session.sendMessage(new TextMessage("Welcome! You are connected to the chat server."));
-        sessionRegistry.logActiveSessions();
+        sessionRegistry.countSessions();
+
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         sessionRegistry.removeSession(session.getId());
-        sessions.remove(session);
-        logger.info("Session disconnected: [{}] with status {}. Total sessions: {}",
-                session.getId(), status.getCode(), sessions.size());
-        sessionRegistry.logActiveSessions();
+        logger.info("Session disconnected: [{}] with status {}", session.getId(), status.getCode());
+        sessionRegistry.countSessions();
     }
 
     @Override
