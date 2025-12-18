@@ -45,4 +45,7 @@ public class SessionRegistry {
         }
         logger.info("Active Sessions ({}): {} ", getSessionCount(),sb.toString().trim()); ;
     }
+
+    public void countSessions() {
+    }
 }
