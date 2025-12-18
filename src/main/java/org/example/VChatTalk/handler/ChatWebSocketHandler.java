@@ -29,7 +29,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
 
     private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
-    private static final long LIMIT_MS = 200;
+    private static final long RATE_LIMIT_INTERVAL_MS = 200;
 
 
     private static final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
@@ -48,7 +48,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessions.add(session); // add for broadcast
         logger.info("New connection established. Session ID: {}", session.getId());
         session.sendMessage(new TextMessage("Welcome! You are connected to the chat server."));
-        sessionRegistry.logActiveSessions();
+        sessionRegistry.countSessions();
     }
 
     @Override
@@ -57,7 +57,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessions.remove(session);
         logger.info("Session disconnected: [{}] with status {}. Total sessions: {}",
                 session.getId(), status.getCode(), sessions.size());
-        sessionRegistry.logActiveSessions();
+        sessionRegistry.countSessions();
     }
 
     @Override
@@ -65,7 +65,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         // Rate-limit
         long now = System.currentTimeMillis();
         Long last = lastMessageTime.get(session.getId());
-        if (last != null && now - last < LIMIT_MS) {
+        if (last != null && now - last < RATE_LIMIT_INTERVAL_MS) {
             log.warn("[RATE_LIMIT] Session {} sending too fast", session.getId());
             return;
         }
