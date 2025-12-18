@@ -1,4 +1,4 @@
-package org.example.VChatTalk.Service;
+package org.example.VChatTalk.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +46,9 @@ public class SessionRegistry {
             return null;
         }
         return sessions.get(sessionId);
+    }
+    public boolean isUserRegistered(String sessionId) {
+        return sessionUsernames.containsKey(sessionId);
     }
     public Collection<WebSocketSession> getAllSessions(){
         return sessions.values();

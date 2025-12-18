@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
-import org.example.VChatTalk.Service.SessionRegistry;
+import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.springframework.stereotype.Component;
@@ -59,16 +59,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 
-        String username = sessionRegistry.getUsername(session.getId());
+        String sessionId = session.getId();
+        // [FIX: Review] Chỉ lấy tên nếu người dùng thực sự đã JOIN thành công
+        String username = sessionRegistry.isUserRegistered(sessionId)
+                ? sessionRegistry.getUsername(sessionId) : null;
 
-        sessionRegistry.removeSession(session.getId());
+        sessionRegistry.removeSession(sessionId);
         sessions.remove(session);
-        lastMessageTime.remove(session.getId());
+        lastMessageTime.remove(sessionId);
 
+        // [FIX: Review] Chỉ broadcast nếu họ đã từng JOIN (tránh nhiễu "Anonymous left")
+        if (username != null) {
+            broadcast(systemMessage(sanitize(username) + " has left the chat."), null);
+        }
 
-        broadcast(systemMessage(username + " has left the chat."), null);
-
-        log.info("[DISCONNECT] {} ({}) - {}", username, session.getId(), status.getCode());
+        log.info("[DISCONNECT] {} ({}) - {}", username != null ? username : "Unregistered", sessionId, status.getCode());
         sessionRegistry.countSessions();
     }
 
@@ -92,16 +97,34 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             MessageDTO dto = mapper.readValue(payload, MessageDTO.class);
 
-
             if (dto.getType() == MessageType.JOIN) {
-                String name = (dto.getSender() == null || dto.getSender().isBlank())
-                        ? "Guest_" + sessionId.substring(0, 4) : dto.getSender();
+
+                if (sessionRegistry.isUserRegistered(sessionId)) {
+                    sendError(session, "You have already joined the chat.");
+                    return;
+                }
+
+                String rawName = dto.getSender();
+                String name = (rawName == null || rawName.isBlank())
+                        ? "Guest_" + sessionId.substring(0, 8) : sanitize(rawName);
+
+                if (name.length() > 20) {
+                    sendError(session, "Username is too long (Max 20 characters).");
+                    return;
+                }
 
                 sessionRegistry.registerUser(sessionId, name);
                 broadcast(systemMessage(name + " joined the chat."), null);
+
+                // [FIX: Review] Gửi thông báo xác nhận riêng cho người mới vào
+                sendNotification(session, "Success! You joined the chat as " + name + ".");
                 return;
             }
 
+            if (!sessionRegistry.isUserRegistered(sessionId)) {
+                sendError(session, "Please send a JOIN message first to participate in the chat.");
+                return;
+            }
 
             dto.setSender(sessionRegistry.getUsername(sessionId));
 
@@ -113,13 +136,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             dto.setTimestamp(Instant.now());
             if (dto.getType() == null) dto.setType(MessageType.MESSAGE);
 
-
             broadcast(dto, session);
 
         } catch (Exception e) {
             log.warn("[PARSE_ERROR] From [{}]: {}", sessionId, e.getMessage());
             sendError(session, "Invalid JSON format.");
-
+            return; // [FIX: Review] Thêm return để dừng xử lý ngay lập tức
         }
 
     }
@@ -174,5 +196,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.removeSession(s.getId());
         lastMessageTime.remove(s.getId());
         log.warn("[CLEANUP] Removed dead session {}", s.getId());
+    }
+    private String sanitize(String input) {
+        if (input == null) return "";
+        return input.replaceAll("[^a-zA-Z0-9_\\s-]", "").trim();
+    }
+
+    private void sendNotification(WebSocketSession session, String content) throws IOException {
+        MessageDTO dto = systemMessage(content);
+        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
     }
 }
