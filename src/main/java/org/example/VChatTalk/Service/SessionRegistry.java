@@ -38,4 +38,5 @@ public class SessionRegistry {
     public void countSessions(){
         logger.info("Active sessions({})", sessions.size());
     }
+
 }
