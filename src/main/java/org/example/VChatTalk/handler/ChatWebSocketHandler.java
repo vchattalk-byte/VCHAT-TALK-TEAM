@@ -52,20 +52,23 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         mapper.writeValueAsString(welcome);
         session.sendMessage(new TextMessage(mapper.writeValueAsString(welcome)));
 
-        // Thông báo người khác biết
-        broadcast(systemMessage("A new user joined the chat."), session);
-
         log.info("[CONNECT] New session: {}", session.getId());
         sessionRegistry.countSessions();
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+
+        String username = sessionRegistry.getUsername(session.getId());
+
         sessionRegistry.removeSession(session.getId());
         sessions.remove(session);
         lastMessageTime.remove(session.getId());
-        broadcast(systemMessage("A user has disconnected."), session);
-        log.info("[DISCONNECT] {} - {}", session.getId(), status.getCode());
+
+
+        broadcast(systemMessage(username + " has left the chat."), null);
+
+        log.info("[DISCONNECT] {} ({}) - {}", username, session.getId(), status.getCode());
         sessionRegistry.countSessions();
     }
 
@@ -85,31 +88,40 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String payload = message.getPayload();
         log.info("[RECEIVE] {} -> {}", session.getId(), payload);
 
-        MessageDTO dto;
+        String sessionId = session.getId();
         try {
-            dto = mapper.readValue(payload, MessageDTO.class);
+            MessageDTO dto = mapper.readValue(payload, MessageDTO.class);
 
-            if (dto.getSender() == null || dto.getSender().isBlank()) {
-                dto.setSender("Anonymous");
+
+            if (dto.getType() == MessageType.JOIN) {
+                String name = (dto.getSender() == null || dto.getSender().isBlank())
+                        ? "Guest_" + sessionId.substring(0, 4) : dto.getSender();
+
+                sessionRegistry.registerUser(sessionId, name);
+                broadcast(systemMessage(name + " joined the chat."), null);
+                return;
             }
+
+
+            dto.setSender(sessionRegistry.getUsername(sessionId));
+
             if (dto.getContent() == null || dto.getContent().isBlank()) {
                 sendError(session, "Empty message ignored.");
                 return;
             }
-            if (dto.getType() == null) {
-                dto.setType(MessageType.MESSAGE);
-            }
+
+            dto.setTimestamp(Instant.now());
+            if (dto.getType() == null) dto.setType(MessageType.MESSAGE);
+
+
+            broadcast(dto, session);
 
         } catch (Exception e) {
-            log.warn("[PARSE_ERROR] Invalid message from [{}]: {}", session.getId(), e.getMessage());
-            dto = new MessageDTO();
-            dto.setType(MessageType.MESSAGE);
-            dto.setSender("Anonymous");
-            dto.setContent(payload);
+            log.warn("[PARSE_ERROR] From [{}]: {}", sessionId, e.getMessage());
+            sendError(session, "Invalid JSON format.");
+
         }
 
-        dto.setTimestamp(Instant.now());
-        broadcast(dto, session);
     }
 
     /** ========== BROADCAST ========== */
@@ -117,11 +129,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             String json = mapper.writeValueAsString(dto);
             Iterator<WebSocketSession> iterator = sessions.iterator();
+            boolean isSystemMessage = (sender == null);
 
             while (iterator.hasNext()) {
                 WebSocketSession s = iterator.next();
                 try {
-                    if (s.isOpen() && !s.getId().equals(sender.getId())) {
+                    if (s.isOpen() && (isSystemMessage || !s.getId().equals(sender.getId()))) {
                         s.sendMessage(new TextMessage(json));
                     } else if (!s.isOpen()) {
                         cleanup(iterator, s);
