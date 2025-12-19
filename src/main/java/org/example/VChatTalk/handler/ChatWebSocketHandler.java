@@ -47,7 +47,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.addSession(session);
         sessions.add(session);
 
-        // Gửi welcome message
         MessageDTO welcome = new MessageDTO();
         welcome.setType(MessageType.SYSTEM);
         welcome.setSender("System");
@@ -65,17 +64,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         String sessionId = session.getId();
 
+        sessions.remove(session);
+        lastMessageTime.remove(sessionId);
+        sessionRegistry.removeSession(sessionId);
 
-        MessageDTO leave = chatService.handleLeave(session.getId());
+        MessageDTO leave = chatService.handleLeave(sessionId);
         if (leave != null) {
             broadcast(leave, null);
         }
-        sessions.remove(session);
-        lastMessageTime.remove(sessionId);
 
         log.info("[DISCONNECT] {} - {}", sessionId, status.getCode());
         sessionRegistry.countSessions();
-
     }
 
     /** ========== MESSAGE HANDLING ========== */
