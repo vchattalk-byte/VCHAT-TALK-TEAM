@@ -1,8 +1,9 @@
 package org.example.VChatTalk.command;
 
 public enum CommandType {
+    NONE,       // normal text
+    HELP,
     SELECT,     // /select username
-    UNKNOWN,    // starts with / but invalid
-    NONE,        // normal text
-    LIST
+    LIST,
+    UNKNOWN     // starts with / but invalid
 }

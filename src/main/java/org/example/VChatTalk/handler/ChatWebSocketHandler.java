@@ -19,7 +19,10 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -27,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final SessionRegistry sessionRegistry;
-    private CommandParserService commandParserService;
+    private final CommandParserService commandParserService;
     private static final long RATE_LIMIT_MS = 200;
 
     private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
@@ -110,7 +113,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            if (dto.getType() == MessageType.MESSAGE && dto.getContent() !=null && dto.getContent().startsWith("/")){
+            if (dto.getType() == MessageType.MESSAGE && dto.getContent() != null && dto.getContent().startsWith("/")){
+                if (!sessionRegistry.isUserRegistered(session.getId())) {
+                    log.warn("Anonymous user attempted to execute a command: {}", dto.getContent());
+                    // Optionally, send a message back to the user saying they must register first
+                    session.sendMessage(new TextMessage("You must join the chat before executing commands."));
+                    return;
+                }
                 CommandResult result = commandParserService.parse(dto.getContent());
                 if (result.getType() != CommandType.NONE) {
                     handleCommandResult(session, result);
@@ -196,6 +205,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
                 case NONE -> {
                    // do nothing
+                }
+                case HELP ->{
+                    String commands = "/help - Hiển thị các lệnh hiện có\n"
+                            + "/join <username> - Tham gia vào phòng chat\n"
+                            + "/send <message>- Gửi tin nhắn tới mọi người trong phòng chat\n"
+                            + "/list - Liệt kê các người dùng hiện tại\n"
+                            + "/select <name> - Chọn người dùng cụ thể\n"
+                            + "/exit - Thoát khỏi phòng chat\n";
+                    session.sendMessage(new TextMessage("Các lệnh hiện có:\n" + commands));
                 }
 
                 case SELECT -> {

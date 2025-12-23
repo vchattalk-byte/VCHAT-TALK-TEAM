@@ -24,6 +24,7 @@ public class DummyClientTest {
 
         System.out.println("=== Dummy CLI Chat Client (CHAT-013) ===");
         System.out.println("Commands:");
+        System.out.println("  /help");
         System.out.println("  /join <username>");
         System.out.println("  /send <message>");
         System.out.println("  /exit");

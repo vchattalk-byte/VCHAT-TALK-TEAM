@@ -12,6 +12,8 @@ public class CommandParserService {
             Pattern.compile("^/select\\s+(\\S+)$");
     private static final Pattern LIST_PATTERN =
             Pattern.compile("^/list$");
+    private static final Pattern HELP_PATTERN =
+            Pattern.compile("^/help$");
 
 
     public CommandResult parse(String rawText) {
@@ -49,10 +51,19 @@ public class CommandParserService {
             );
         }
 
+        Matcher helpMatcher = HELP_PATTERN.matcher(rawText);
+        if (helpMatcher.matches()) {
+            return new CommandResult(
+                    CommandType.HELP,
+                    null,
+                    null
+            );
+        }
+
         return new CommandResult(
                 CommandType.UNKNOWN,
                 null,
-                "Invalid command"
+                "Unknown command. Type /help for more information."
         );
     }
 }
