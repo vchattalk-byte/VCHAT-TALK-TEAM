@@ -24,6 +24,7 @@ public class DummyClientTest {
 
         System.out.println("=== Dummy CLI Chat Client (CHAT-013) ===");
         System.out.println("Commands:");
+        System.out.println("  /help");
         System.out.println("  /join <username>");
         System.out.println("  /send <message>");
         System.out.println("  /exit");
@@ -69,6 +70,15 @@ public class DummyClientTest {
             } else if (input.equals("/exit")) {
                 handleExit();
                 break;
+            } else if (input.startsWith("/")) {
+                sendMessage(
+                        MessageDTO.builder()
+                                .type(MessageType.MESSAGE)
+                                .sender(username != null ? username : "unknown")
+                                .content(input)
+                                .timestamp(Instant.now())
+                                .build()
+                );
             } else {
                 System.out.println("ERROR: Unknown command");
             }
