@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
+import org.example.VChatTalk.command.CommandParserService;
+import org.example.VChatTalk.command.CommandResult;
+import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.service.ChatService;
 import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.model.MessageDTO;
@@ -16,8 +19,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -25,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final SessionRegistry sessionRegistry;
+    private CommandParserService commandParserService;
     private static final long RATE_LIMIT_MS = 200;
 
     private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
@@ -34,14 +37,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    public ChatWebSocketHandler(SessionRegistry sessionRegistry,
-                                ChatService chatService) {
+    public ChatWebSocketHandler(SessionRegistry sessionRegistry, ChatService chatService, CommandParserService commandParserService) {
         this.sessionRegistry = sessionRegistry;
         this.chatService = chatService;
+        this.commandParserService = commandParserService;
     }
 
 
-    /** ========== CONNECTION HANDLING ========== */
+    /**
+     * ========== CONNECTION HANDLING ==========
+     */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         sessionRegistry.addSession(session);
@@ -77,7 +82,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.countSessions();
     }
 
-    /** ========== MESSAGE HANDLING ========== */
+    /**
+     * ========== MESSAGE HANDLING ==========
+     */
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         long now = System.currentTimeMillis();
@@ -103,6 +110,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
+            if (dto.getType() == MessageType.MESSAGE && dto.getContent() !=null && dto.getContent().startsWith("/")){
+                CommandResult result = commandParserService.parse(dto.getContent());
+                if (result.getType() != CommandType.NONE) {
+                    handleCommandResult(session, result);
+                    return;
+                }
+            }
+
             MessageDTO chat = chatService.handleMessage(sessionId, dto);
             broadcast(chat, session);
 
@@ -117,7 +132,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     }
 
-    /** ========== BROADCAST ========== */
+    /**
+     * ========== BROADCAST ==========
+     */
     private void broadcast(MessageDTO dto, WebSocketSession sender) {
         try {
             String json = mapper.writeValueAsString(dto);
@@ -169,4 +186,59 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         log.warn("[CLEANUP] Removed dead session {}", s.getId());
     }
 
+    private void handleCommandResult(WebSocketSession session, CommandResult result) {
+        try {
+            MessageDTO dto = new MessageDTO();
+            dto.setSender("System");
+            dto.setTimestamp(Instant.now());
+
+            switch (result.getType()) {
+
+                case NONE -> {
+                   // do nothing
+                }
+
+                case SELECT -> {
+                    dto.setType(MessageType.SYSTEM);
+                    dto.setContent("Bạn đã chọn: " + result.getTargetUsername());
+                    session.sendMessage(
+                            new TextMessage(mapper.writeValueAsString(dto))
+                    );
+                }
+
+                case LIST -> {
+                    dto.setType(MessageType.SYSTEM);
+
+                    List<String> users = new ArrayList<>();
+
+                    for (WebSocketSession s : sessionRegistry.getAllSessions()) {
+                        String username = sessionRegistry.getUsername(s.getId());
+                        if (username != null) {
+                            users.add(username);
+                        }
+                    }
+
+                    dto.setContent(
+                            users.isEmpty()
+                                    ? "No users online"
+                                    : "Online users: " + String.join(", ", users)
+                    );
+                    session.sendMessage(
+                            new TextMessage(mapper.writeValueAsString(dto))
+                    );
+                }
+
+                case UNKNOWN -> {
+                    dto.setType(MessageType.ERROR);
+                    dto.setContent(result.getError() != null ? result.getError() : "❌ Lệnh không hợp lệ vui lòng nhập lại.");
+                    session.sendMessage(
+                            new TextMessage(mapper.writeValueAsString(dto))
+                    );
+                }
+            }
+
+        } catch (IOException e) {
+            log.warn("[COMMAND_HANDLE_ERROR] Session {}: {}", session.getId(), e.getMessage());
+        }
+    }
 }

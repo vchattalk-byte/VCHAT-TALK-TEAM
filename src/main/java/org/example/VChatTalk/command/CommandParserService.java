@@ -10,6 +10,9 @@ public class CommandParserService {
 
     private static final Pattern SELECT_PATTERN =
             Pattern.compile("^/select\\s+(\\S+)$");
+    private static final Pattern LIST_PATTERN =
+            Pattern.compile("^/list$");
+
 
     public CommandResult parse(String rawText) {
 
@@ -36,6 +39,15 @@ public class CommandParserService {
             return new CommandResult(
                     CommandType.SELECT,
                     selectMatcher.group(1),
+                    null,
+                    null
+            );
+        }
+        Matcher listMatcher = LIST_PATTERN.matcher(rawText);
+        if (listMatcher.matches()) {
+            return new CommandResult(
+                    CommandType.LIST,
+                    null,
                     null,
                     null
             );

@@ -69,6 +69,15 @@ public class DummyClientTest {
             } else if (input.equals("/exit")) {
                 handleExit();
                 break;
+            } else if (input.startsWith("/")) {
+                sendMessage(
+                        MessageDTO.builder()
+                                .type(MessageType.MESSAGE)
+                                .sender(username != null ? username : "unknown")
+                                .content(input)
+                                .timestamp(Instant.now())
+                                .build()
+                );
             } else {
                 System.out.println("ERROR: Unknown command");
             }
