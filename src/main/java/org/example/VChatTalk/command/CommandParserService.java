@@ -20,7 +20,6 @@ public class CommandParserService {
             return new CommandResult(
                     CommandType.NONE,
                     null,
-                    "",
                     null
             );
         }
@@ -29,7 +28,6 @@ public class CommandParserService {
             return new CommandResult(
                     CommandType.NONE,
                     null,
-                    rawText,
                     null
             );
         }
@@ -39,7 +37,6 @@ public class CommandParserService {
             return new CommandResult(
                     CommandType.SELECT,
                     selectMatcher.group(1),
-                    null,
                     null
             );
         }
@@ -48,14 +45,12 @@ public class CommandParserService {
             return new CommandResult(
                     CommandType.LIST,
                     null,
-                    null,
                     null
             );
         }
 
         return new CommandResult(
                 CommandType.UNKNOWN,
-                null,
                 null,
                 "Invalid command"
         );

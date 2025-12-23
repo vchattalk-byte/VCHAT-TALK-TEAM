@@ -11,7 +11,5 @@ public class CommandResult {
 
     private String targetUsername;
 
-    private String content;
-
     private String error;
 }
