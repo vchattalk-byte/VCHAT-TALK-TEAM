@@ -51,7 +51,7 @@ class ChatServiceTest {
 
     // Test Case 2: Successful registration (Happy Path)
     @Test
-    void testHandleJoin_ValidUsername_ShouldSuccess() {
+    void testHandleJoin_ValidUsername_ShouldSucceed() {
         // GIVEN
         String sessionId = "session-123";
         String newName = "Bob";

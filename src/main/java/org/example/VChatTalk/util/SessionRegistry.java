@@ -90,7 +90,7 @@ public class SessionRegistry {
         }
     }
 
-    // Check user is online or offline
+    // Check if user is online
     public boolean isUserOnline(String username) {
         if (username == null){
             return false;
@@ -100,13 +100,12 @@ public class SessionRegistry {
     }
 
     // Find list of sessionIds targeting a single username
-    public List<String> getSessionsTargeting (String targetUsername) {
+    public List<String> getSessionsTargeting(String targetUsername) {
         if (targetUsername == null) {
             return Collections.emptyList();
         }
 
         List<String> targetingSessions = new ArrayList<>();
-
 
         sessionTargets.forEach((sessionId, target) -> {
             if (target.equals(targetUsername)) {
