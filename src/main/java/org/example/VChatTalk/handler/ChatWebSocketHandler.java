@@ -71,6 +71,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 
         String sessionId = session.getId();
+        String username = sessionRegistry.getUsername(sessionId);
+
+        if (!"Anonymous".equals(username)) {
+            List<String> followers = sessionRegistry.getSessionsTargeting(username);
+
+            for (String followerSessionId : followers) {
+                WebSocketSession followerSession = sessionRegistry.findSessionById(followerSessionId);
+                // Check if online
+                if (followerSession != null && followerSession.isOpen()) {
+                    try {
+                        // Remove target and reset to global or null
+                        sessionRegistry.removeTarget(followerSessionId);
+
+                        // Send notification
+                        sendSystem(followerSession, "Người dùng " + username + " đã thoát. Chế độ chat riêng đã kết thúc.");
+                    } catch (IOException e) {
+                        log.error("Lỗi khi gửi thông báo thoát cho session {}: {}", followerSessionId, e.getMessage());
+                    }
+                }
+            }
+        }
 
         sessions.remove(session);
         lastMessageTime.remove(sessionId);
@@ -217,11 +238,25 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
 
                 case SELECT -> {
-                    dto.setType(MessageType.SYSTEM);
-                    dto.setContent("Bạn đã chọn: " + result.getTargetUsername());
-                    session.sendMessage(
-                            new TextMessage(mapper.writeValueAsString(dto))
-                    );
+                    String targetUser = result.getTargetUsername();
+                    String currentUser = sessionRegistry.getUsername(session.getId());
+
+                    // Block chat with itself
+                    if (targetUser.equals(currentUser)) {
+                        sendError(session, "Bạn không thể chat riêng với chính mình!");
+                        break;
+                    }
+
+                    // check target is online
+                    if (sessionRegistry.isUserOnline(targetUser)) {
+                        sessionRegistry.setTarget(session.getId(), targetUser);
+
+                        dto.setType(MessageType.SYSTEM);
+                        dto.setContent("Đã chuyển sang chế độ chat riêng với: " + targetUser);
+                        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
+                    } else {
+                        sendError(session, "Người dùng '" + targetUser + "' không trực tuyến hoặc không tồn tại.");
+                    }
                 }
 
                 case LIST -> {

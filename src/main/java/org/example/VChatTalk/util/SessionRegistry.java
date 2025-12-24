@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -15,6 +17,8 @@ public class SessionRegistry {
 
     private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
 
+    // Map target: key = sessionId, value = username
+    private final ConcurrentHashMap<String, String> sessionTargets = new ConcurrentHashMap<>();
 
     public void addSession(WebSocketSession session){
         if(session != null && session.getId()!=null){
@@ -57,5 +61,48 @@ public class SessionRegistry {
         logger.info("Active sessions({})", sessions.size());
     }
 
+    // Set target for current session
+    public void setTarget(String sessionId, String targetUsername) {
+        if (sessionId != null && targetUsername != null) {
+            sessionTargets.put(sessionId, targetUsername);
+        }
+    }
 
+    // Get target for current session
+    public String getTarget(String sessionId) {
+        return sessionTargets.get(sessionId);
+    }
+
+    // Remove target
+    public void removeTarget(String sessionId) {
+        if (sessionId != null) {
+            sessionTargets.remove(sessionId);
+        }
+    }
+
+    // Check user is online or offline
+    public boolean isUserOnline(String username) {
+        if (username == null){
+            return false;
+        }
+
+        return sessionUsernames.containsValue(username);
+    }
+
+    // Find list of sessionId is targeted to one username
+    public List<String> getSessionsTargeting (String targetUsername) {
+        List<String> targetingSessions = new ArrayList<>();
+
+        if (targetUsername == null) {
+            return targetingSessions;
+        }
+
+        sessionTargets.forEach((sessionId, target) -> {
+            if (target.equals(targetUsername)) {
+                targetingSessions.add(sessionId);
+            }
+        });
+
+        return targetingSessions;
+    }
 }
