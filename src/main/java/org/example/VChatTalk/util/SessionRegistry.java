@@ -7,6 +7,7 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -91,11 +92,12 @@ public class SessionRegistry {
 
     // Find list of sessionId is targeted to one username
     public List<String> getSessionsTargeting (String targetUsername) {
+        if (targetUsername == null) {
+            return Collections.emptyList();
+        }
+
         List<String> targetingSessions = new ArrayList<>();
 
-        if (targetUsername == null) {
-            return targetingSessions;
-        }
 
         sessionTargets.forEach((sessionId, target) -> {
             if (target.equals(targetUsername)) {
@@ -103,6 +105,6 @@ public class SessionRegistry {
             }
         });
 
-        return targetingSessions;
+        return Collections.unmodifiableList(targetingSessions);
     }
 }

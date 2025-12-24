@@ -97,7 +97,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         sessions.remove(session);
         lastMessageTime.remove(sessionId);
-        sessionRegistry.removeSession(sessionId);
 
         if (leaveMessage != null) {
             broadcast(leaveMessage, null);
