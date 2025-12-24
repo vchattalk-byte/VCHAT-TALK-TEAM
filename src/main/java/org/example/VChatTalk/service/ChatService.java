@@ -37,15 +37,14 @@ public class ChatService {
             throw new IllegalArgumentException("Username is too long (max 20 characters).");
         }
 
-        if (sessionRegistry.isUserOnline(name)) {
+        boolean success = sessionRegistry.tryRegisterUser(sessionId, name);
+        if (!success) {
             throw new IllegalArgumentException("Username '" + name + "' is already taken. Please choose another.");
         }
 
-        sessionRegistry.registerUser(sessionId, name);
-
 
         int count = sessionRegistry.getAllSessions().size();
-        return systemMessage(name + " has join the chat. (Active: " + count + ")");
+        return systemMessage(name + " has joined the chat. (Total: " + count + ")");
     }
 
     public MessageDTO handleMessage(String sessionId, MessageDTO dto) {
@@ -72,7 +71,7 @@ public class ChatService {
         String username = sessionRegistry.getUsername(sessionId);
         sessionRegistry.removeSession(sessionId);
         int count = sessionRegistry.getAllSessions().size();
-        return systemMessage(username + " has left the chat. (Active: " + count + ")");
+        return systemMessage(username + " has left the chat. (Total: " + count + ")");
     }
 
     private MessageDTO systemMessage(String content) {

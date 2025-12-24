@@ -84,7 +84,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         // Remove target and reset to global or null
                         sessionRegistry.removeTarget(followerSessionId);
 
-                        // Send notification
                         sendSystem(followerSession, "User " + username + " has disconnected. Private chat ended.");
                     } catch (IOException e) {
                         log.error("Error sending disconnect notification: {}", e.getMessage());
@@ -92,6 +91,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
             }
         }
+
+        sessionRegistry.removeTarget(sessionId);
 
         MessageDTO leaveMessage = chatService.handleLeave(sessionId);
 
@@ -237,6 +238,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
 
                 case SELECT -> {
+                    if (!sessionRegistry.isUserRegistered(session.getId())) {
+                        sendError(session, "You must join the chat first! Use /join <username>");
+                        break;
+                    }
+
                     String targetUser = result.getTargetUsername();
                     String currentUser = sessionRegistry.getUsername(session.getId());
 
@@ -282,7 +288,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
                 case UNKNOWN -> {
                     dto.setType(MessageType.ERROR);
-                    dto.setContent(result.getError() != null ? result.getError() : "Invalid command. Type /help for assistance.");                    session.sendMessage(
+                    dto.setContent(result.getError() != null ? result.getError() : "Invalid command. Type /help for assistance.");
+                    session.sendMessage(
                             new TextMessage(mapper.writeValueAsString(dto))
                     );
                 }

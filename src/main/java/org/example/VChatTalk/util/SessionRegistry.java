@@ -18,7 +18,7 @@ public class SessionRegistry {
 
     private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
 
-    // Map target: key = sessionId, value = username
+    // Map of private chat targets: key = sessionId (who is targeting), value = targetUsername (who is being targeted)
     private final ConcurrentHashMap<String, String> sessionTargets = new ConcurrentHashMap<>();
 
     public void addSession(WebSocketSession session){
@@ -39,11 +39,15 @@ public class SessionRegistry {
         return sessionUsernames.getOrDefault(sessionId, "Anonymous");
     }
 
-    public void registerUser(String sessionId, String name) {
-        if (sessionId != null && name != null) {
-            sessionUsernames.put(sessionId, name);
-            logger.info("Registered user: {} with session: {}", name, sessionId);
+    public synchronized boolean tryRegisterUser(String sessionId, String username) {
+        if (sessionUsernames.containsValue(username)) {
+            return false;
         }
+
+        sessionUsernames.put(sessionId, username);
+
+        logger.info("Registered user: '{}' with session ID: {}", username, sessionId);
+        return true;
     }
 
     public WebSocketSession findSessionById(String sessionId){
@@ -52,9 +56,11 @@ public class SessionRegistry {
         }
         return sessions.get(sessionId);
     }
+
     public boolean isUserRegistered(String sessionId) {
         return sessionUsernames.containsKey(sessionId);
     }
+
     public Collection<WebSocketSession> getAllSessions(){
         return sessions.values();
     }
@@ -71,6 +77,9 @@ public class SessionRegistry {
 
     // Get target for current session
     public String getTarget(String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
         return sessionTargets.get(sessionId);
     }
 
@@ -90,7 +99,7 @@ public class SessionRegistry {
         return sessionUsernames.containsValue(username);
     }
 
-    // Find list of sessionId is targeted to one username
+    // Find list of sessionIds targeting a single username
     public List<String> getSessionsTargeting (String targetUsername) {
         if (targetUsername == null) {
             return Collections.emptyList();
@@ -107,4 +116,6 @@ public class SessionRegistry {
 
         return Collections.unmodifiableList(targetingSessions);
     }
+
+
 }
