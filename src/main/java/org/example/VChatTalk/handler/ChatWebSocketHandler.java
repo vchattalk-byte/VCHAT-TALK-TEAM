@@ -71,14 +71,36 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 
         String sessionId = session.getId();
+        String username = sessionRegistry.getUsername(sessionId);
+
+        if (!"Anonymous".equals(username)) {
+            List<String> followers = sessionRegistry.getSessionsTargeting(username);
+
+            for (String followerSessionId : followers) {
+                WebSocketSession followerSession = sessionRegistry.findSessionById(followerSessionId);
+                // Check if online
+                if (followerSession != null && followerSession.isOpen()) {
+                    try {
+                        // Remove target and reset to global or null
+                        sessionRegistry.removeTarget(followerSessionId);
+
+                        sendSystem(followerSession, "User " + username + " has disconnected. Private chat ended.");
+                    } catch (IOException e) {
+                        log.error("Error sending disconnect notification: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+
+        sessionRegistry.removeTarget(sessionId);
+
+        MessageDTO leaveMessage = chatService.handleLeave(sessionId);
 
         sessions.remove(session);
         lastMessageTime.remove(sessionId);
-        sessionRegistry.removeSession(sessionId);
 
-        MessageDTO leave = chatService.handleLeave(sessionId);
-        if (leave != null) {
-            broadcast(leave, null);
+        if (leaveMessage != null) {
+            broadcast(leaveMessage, null);
         }
 
         log.info("[DISCONNECT] {} - {}", sessionId, status.getCode());
@@ -207,21 +229,39 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                    // do nothing
                 }
                 case HELP ->{
-                    String commands = "/help - Hiển thị các lệnh hiện có\n"
-                            + "/join <username> - Tham gia vào phòng chat\n"
-                            + "/send <message>- Gửi tin nhắn tới mọi người trong phòng chat\n"
-                            + "/list - Liệt kê các người dùng hiện tại\n"
-                            + "/select <name> - Chọn người dùng cụ thể\n"
-                            + "/exit - Thoát khỏi phòng chat\n";
-                    session.sendMessage(new TextMessage("Các lệnh hiện có:\n" + commands));
+                    String commands = "/help - Show available commands\n"
+                            + "/join <username> - Join the chat with a username\n"
+                            + "/list - List all online users\n"
+                            + "/select <name> - Select a user for private chat (1-on-1)\n"
+                            + "/exit - Disconnect from the server.\n";
+                    session.sendMessage(new TextMessage("Available commands:\n" + commands));
                 }
 
                 case SELECT -> {
-                    dto.setType(MessageType.SYSTEM);
-                    dto.setContent("Bạn đã chọn: " + result.getTargetUsername());
-                    session.sendMessage(
-                            new TextMessage(mapper.writeValueAsString(dto))
-                    );
+                    if (!sessionRegistry.isUserRegistered(session.getId())) {
+                        sendError(session, "You must join the chat first! Use /join <username>");
+                        break;
+                    }
+
+                    String targetUser = result.getTargetUsername();
+                    String currentUser = sessionRegistry.getUsername(session.getId());
+
+                    // Block chat with itself
+                    if (targetUser.equals(currentUser)) {
+                        sendError(session, "You cannot chat with yourself!");
+                        break;
+                    }
+
+                    // check target is online
+                    if (sessionRegistry.isUserOnline(targetUser)) {
+                        sessionRegistry.setTarget(session.getId(), targetUser);
+
+                        dto.setType(MessageType.SYSTEM);
+                        dto.setContent("Switched to private chat with: " + targetUser);
+                        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
+                    } else {
+                        sendError(session, "User '" + targetUser + "' is offline or does not exist.");
+                    }
                 }
 
                 case LIST -> {
@@ -248,7 +288,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
                 case UNKNOWN -> {
                     dto.setType(MessageType.ERROR);
-                    dto.setContent(result.getError() != null ? result.getError() : "❌ Lệnh không hợp lệ vui lòng nhập lại.");
+                    dto.setContent(result.getError() != null ? result.getError() : "Invalid command. Type /help for assistance.");
                     session.sendMessage(
                             new TextMessage(mapper.writeValueAsString(dto))
                     );

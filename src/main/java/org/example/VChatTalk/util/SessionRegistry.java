@@ -5,7 +5,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -15,6 +18,8 @@ public class SessionRegistry {
 
     private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
 
+    // Map of private chat targets: key = sessionId (who is targeting), value = targetUsername (who is being targeted)
+    private final ConcurrentHashMap<String, String> sessionTargets = new ConcurrentHashMap<>();
 
     public void addSession(WebSocketSession session){
         if(session != null && session.getId()!=null){
@@ -34,11 +39,15 @@ public class SessionRegistry {
         return sessionUsernames.getOrDefault(sessionId, "Anonymous");
     }
 
-    public void registerUser(String sessionId, String name) {
-        if (sessionId != null && name != null) {
-            sessionUsernames.put(sessionId, name);
-            logger.info("Registered user: {} with session: {}", name, sessionId);
+    public synchronized boolean tryRegisterUser(String sessionId, String username) {
+        if (sessionUsernames.containsValue(username)) {
+            return false;
         }
+
+        sessionUsernames.put(sessionId, username);
+
+        logger.info("Registered user: '{}' with session ID: {}", username, sessionId);
+        return true;
     }
 
     public WebSocketSession findSessionById(String sessionId){
@@ -47,14 +56,64 @@ public class SessionRegistry {
         }
         return sessions.get(sessionId);
     }
+
     public boolean isUserRegistered(String sessionId) {
         return sessionUsernames.containsKey(sessionId);
     }
+
     public Collection<WebSocketSession> getAllSessions(){
         return sessions.values();
     }
     public void countSessions(){
         logger.info("Active sessions({})", sessions.size());
+    }
+
+    // Set target for current session
+    public void setTarget(String sessionId, String targetUsername) {
+        if (sessionId != null && targetUsername != null) {
+            sessionTargets.put(sessionId, targetUsername);
+        }
+    }
+
+    // Get target for current session
+    public String getTarget(String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
+        return sessionTargets.get(sessionId);
+    }
+
+    // Remove target
+    public void removeTarget(String sessionId) {
+        if (sessionId != null) {
+            sessionTargets.remove(sessionId);
+        }
+    }
+
+    // Check if user is online
+    public boolean isUserOnline(String username) {
+        if (username == null){
+            return false;
+        }
+
+        return sessionUsernames.containsValue(username);
+    }
+
+    // Find list of sessionIds targeting a single username
+    public List<String> getSessionsTargeting(String targetUsername) {
+        if (targetUsername == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> targetingSessions = new ArrayList<>();
+
+        sessionTargets.forEach((sessionId, target) -> {
+            if (target.equals(targetUsername)) {
+                targetingSessions.add(sessionId);
+            }
+        });
+
+        return Collections.unmodifiableList(targetingSessions);
     }
 
 
