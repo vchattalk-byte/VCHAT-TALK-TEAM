@@ -13,86 +13,86 @@ class SessionRegistryTest {
 
     @BeforeEach
     void setUp() {
-        // Khởi tạo mới Registry trước mỗi bài test để dữ liệu sạch sẽ
+        // Initialize a clean registry before each test
         registry = new SessionRegistry();
     }
 
-    // 1. Test vòng đời cơ bản: Set -> Get -> Remove
+    // 1. Test basic lifecycle: Set -> Get -> Remove
     @Test
     void testTargetLifecycle() {
         String sessionId = "s1";
         String targetName = "Alice";
 
-        // Ban đầu chưa có gì
+        // Initially null
         assertNull(registry.getTarget(sessionId));
 
         // SET
         registry.setTarget(sessionId, targetName);
-        assertEquals(targetName, registry.getTarget(sessionId), "Sau khi set, get phải ra đúng tên");
+        assertEquals(targetName, registry.getTarget(sessionId), "Target name should match after setting");
 
         // REMOVE
         registry.removeTarget(sessionId);
-        assertNull(registry.getTarget(sessionId), "Sau khi remove, get phải ra null");
+        assertNull(registry.getTarget(sessionId), "Target should be null after removal");
     }
 
-    // 2. Test Reverse Lookup (Tìm ngược): Ai đang nhắm vào user này?
+    // 2. Test Reverse Lookup: Who is targeting this user?
     @Test
     void testGetSessionsTargeting() {
-        // Kịch bản: s1 và s2 cùng chat với Alice, s3 chat với Bob
+        // Scenario: s1 and s2 target Alice, s3 targets Bob
         registry.setTarget("s1", "Alice");
         registry.setTarget("s2", "Alice");
         registry.setTarget("s3", "Bob");
 
-        // Kiểm tra danh sách người đang chat với Alice
+        // Verify followers for Alice
         List<String> followersAlice = registry.getSessionsTargeting("Alice");
 
-        assertEquals(2, followersAlice.size(), "Phải có 2 người đang chat với Alice");
+        assertEquals(2, followersAlice.size(), "Alice should have 2 followers");
         assertTrue(followersAlice.contains("s1"));
         assertTrue(followersAlice.contains("s2"));
 
-        // Kiểm tra danh sách người đang chat với Bob
+        // Verify followers for Bob
         List<String> followersBob = registry.getSessionsTargeting("Bob");
         assertEquals(1, followersBob.size());
         assertTrue(followersBob.contains("s3"));
 
-        // Kiểm tra người không ai chat cùng
+        // Verify user with no followers
         List<String> followersNobody = registry.getSessionsTargeting("Charlie");
         assertTrue(followersNobody.isEmpty());
     }
 
-    // 3. Test check Online/Offline
+    // 3. Test Online/Offline check
     @Test
     void testIsUserOnline() {
         String sessionId = "s1";
         String username = "Alice";
 
-        // Ban đầu offline
+        // Initially offline
         assertFalse(registry.isUserOnline(username));
 
-        // Đăng ký user (Sử dụng hàm tryRegisterUser mà bạn vừa thêm)
+        // Register user
         registry.tryRegisterUser(sessionId, username);
 
-        // Bây giờ phải Online
+        // Should be online now
         assertTrue(registry.isUserOnline(username));
 
-        // Check tên lung tung -> False
+        // Check non-existent user -> False
         assertFalse(registry.isUserOnline("Ghost"));
     }
 
-    // 4. Test Edge Cases (Null Safety) - Quan trọng để tránh NullPointerException
+    // 4. Test Edge Cases (Null Safety) - prevent NullPointerException
     @Test
     void testEdgeCases_NullInputs() {
-        // Set null -> Không được lỗi
+        // Set null -> Should not throw exception
         assertDoesNotThrow(() -> registry.setTarget(null, "Alice"));
         assertDoesNotThrow(() -> registry.setTarget("s1", null));
 
-        // Remove null -> Không được lỗi
+        // Remove null -> Should not throw exception
         assertDoesNotThrow(() -> registry.removeTarget(null));
 
-        // Get null -> Ra null
+        // Get null -> Should return null
         assertNull(registry.getTarget(null));
 
-        // Get targeting null -> Ra list rỗng (không được null)
+        // Get targeting null -> Should return empty list (not null)
         List<String> result = registry.getSessionsTargeting(null);
         assertNotNull(result);
         assertTrue(result.isEmpty());

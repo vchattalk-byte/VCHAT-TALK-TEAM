@@ -40,15 +40,15 @@ class ChatWebSocketHandlerTest {
 
     @BeforeEach
     void setUp() {
-        // Mock leniently để tránh lỗi UnnecessaryStubbingException nếu test fail sớm
+        // Mock leniently to avoid UnnecessaryStubbingException if test fails early
         handler = new ChatWebSocketHandler(sessionRegistry, chatService, commandParserService);
         lenient().when(session.getId()).thenReturn("session-123");
     }
 
-    // [QUAN TRỌNG] Dọn dẹp session sau mỗi test để reset Rate Limit
+    // [IMPORTANT] Clean up session after each test to reset Rate Limit
     @AfterEach
     void tearDown() {
-        // Hàm này sẽ xóa session-123 khỏi map lastMessageTime
+        // This will remove session-123 from the lastMessageTime map
         handler.afterConnectionClosed(session, CloseStatus.NORMAL);
     }
 
@@ -62,7 +62,7 @@ class ChatWebSocketHandlerTest {
         when(sessionRegistry.isUserRegistered("session-123")).thenReturn(true);
         when(commandParserService.parse(command)).thenReturn(new CommandResult(CommandType.SELECT, targetName, null));
         when(sessionRegistry.getUsername("session-123")).thenReturn(senderName);
-        when(sessionRegistry.isUserOnline(targetName)).thenReturn(true);
+        when(sessionRegistry.isUserOnline(targetName)).thenReturn(true); // Updated to match renamed method
 
         // WHEN
         MessageDTO dto = new MessageDTO();
@@ -79,7 +79,7 @@ class ChatWebSocketHandlerTest {
         verify(session, atLeastOnce()).sendMessage(messageCaptor.capture());
 
         String sentMessage = messageCaptor.getValue().getPayload();
-        assertTrue(sentMessage.contains("Switched to private chat"), "Phải chứa thông báo thành công");
+        assertTrue(sentMessage.contains("Switched to private chat"), "Should contain success message");
     }
 
     @Test
@@ -105,7 +105,7 @@ class ChatWebSocketHandlerTest {
         verify(session).sendMessage(messageCaptor.capture());
         assertTrue(messageCaptor.getValue().getPayload().contains("offline") ||
                         messageCaptor.getValue().getPayload().contains("ERROR"),
-                "Phải báo lỗi user offline");
+                "Should report offline user error");
     }
 
     @Test
@@ -128,53 +128,52 @@ class ChatWebSocketHandlerTest {
 
         ArgumentCaptor<TextMessage> messageCaptor = ArgumentCaptor.forClass(TextMessage.class);
         verify(session).sendMessage(messageCaptor.capture());
-        assertTrue(messageCaptor.getValue().getPayload().contains("yourself"), "Phải báo lỗi chat với chính mình");
+        assertTrue(messageCaptor.getValue().getPayload().contains("yourself"), "Should report self-chat error");
     }
 
     @Test
     void testDisconnect_ShouldNotifyFollowersAndClearTarget() throws Exception {
-        // --- GIVEN (Chuẩn bị dữ liệu) ---
+        // --- GIVEN ---
 
-        // 1. Giả lập người thoát (Alice)
+        // 1. Simulate the leaver (Alice)
         String leaverSessionId = "session-Alice";
         String leaverName = "Alice";
         WebSocketSession leaverSession = mock(WebSocketSession.class);
         when(leaverSession.getId()).thenReturn(leaverSessionId);
 
-        // 2. Giả lập người đang chat với Alice (Bob - Follower)
+        // 2. Simulate the follower (Bob)
         String followerSessionId = "session-Bob";
         WebSocketSession followerSession = mock(WebSocketSession.class);
-        when(followerSession.isOpen()).thenReturn(true); // Bob đang online
+        when(followerSession.isOpen()).thenReturn(true); // Bob is online
 
-        // --- MOCKING BEHAVIOR (Giả lập hành vi Registry) ---
+        // --- MOCKING BEHAVIOR ---
 
-        // Khi hỏi tên của session thoát -> Trả về Alice
+        // Return Alice when asking for leaver's username
         when(sessionRegistry.getUsername(leaverSessionId)).thenReturn(leaverName);
 
-        // Khi hỏi "Ai đang target Alice?" -> Trả về list chứa Bob
-        // (Lưu ý: Dùng List.of hoặc Collections.singletonList)
+        // Return Bob when asking "Who is targeting Alice?"
         when(sessionRegistry.getSessionsTargeting(leaverName)).thenReturn(java.util.List.of(followerSessionId));
 
-        // Khi Handler tìm session object của Bob -> Trả về mock followerSession
+        // Return mock followerSession when Handler looks up Bob's session
         when(sessionRegistry.findSessionById(followerSessionId)).thenReturn(followerSession);
 
-        // --- WHEN (Thực hiện hành động) ---
-        // Gọi hàm ngắt kết nối cho Alice
+        // --- WHEN ---
+        // Call connection closed handler for Alice
         handler.afterConnectionClosed(leaverSession, CloseStatus.NORMAL);
 
-        // --- THEN (Kiểm tra kết quả) ---
+        // --- THEN ---
 
-        // 1. Verify: Phải xóa target của Bob đi (để Bob không chat với "ma" nữa)
+        // 1. Verify: Bob's target must be removed
         verify(sessionRegistry).removeTarget(followerSessionId);
 
-        // 2. Verify: Phải gửi tin nhắn thông báo cho Bob
+        // 2. Verify: Notification sent to Bob
         ArgumentCaptor<TextMessage> messageCaptor = ArgumentCaptor.forClass(TextMessage.class);
         verify(followerSession).sendMessage(messageCaptor.capture());
 
         String sentMessage = messageCaptor.getValue().getPayload();
-        // Kiểm tra nội dung tin nhắn (Tiếng Anh như đã sửa)
-        assertTrue(sentMessage.contains("Private chat ended"), "Bob phải nhận được thông báo kết thúc chat riêng");
-        assertTrue(sentMessage.contains(leaverName), "Thông báo phải chứa tên người vừa thoát");
+        // Verify message content
+        assertTrue(sentMessage.contains("Private chat ended"), "Bob should receive private chat ended notification");
+        assertTrue(sentMessage.contains(leaverName), "Notification should contain leaver's name");
     }
 
     @Test
@@ -182,11 +181,11 @@ class ChatWebSocketHandlerTest {
         // GIVEN
         String command = "/select Alice";
 
-        // [FIX]: Thêm lenient() để tránh lỗi UnnecessaryStubbing
-        // (Phòng trường hợp code check user trước khi parse hoặc ngược lại)
+        // [FIX]: Add lenient() to avoid UnnecessaryStubbingException
+        // (In case logic checks user registration before parsing command)
         lenient().when(sessionRegistry.isUserRegistered("session-123")).thenReturn(false);
 
-        // [FIX]: Thêm lenient() cho cả dòng parse này luôn cho chắc
+        // [FIX]: Add lenient() for parsing as well
         lenient().when(commandParserService.parse(command)).thenReturn(new CommandResult(CommandType.SELECT, "Alice", null));
 
         // WHEN
@@ -197,13 +196,14 @@ class ChatWebSocketHandlerTest {
         handler.handleTextMessage(session, new TextMessage(mapper.writeValueAsString(dto)));
 
         // THEN
-        // (Các verify bên dưới giữ nguyên)
+        // 1. Ensure setTarget is NEVER called
         verify(sessionRegistry, never()).setTarget(anyString(), anyString());
 
+        // 2. Should send error message
         ArgumentCaptor<TextMessage> messageCaptor = ArgumentCaptor.forClass(TextMessage.class);
         verify(session).sendMessage(messageCaptor.capture());
 
         String sentMessage = messageCaptor.getValue().getPayload();
-        assertTrue(sentMessage.contains("must join"), "Phải yêu cầu user join trước");
+        assertTrue(sentMessage.contains("must join"), "Should require user to join first");
     }
 }
