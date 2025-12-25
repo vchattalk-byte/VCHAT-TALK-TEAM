@@ -5,6 +5,12 @@ import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.example.VChatTalk.util.SessionRegistry;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.example.VChatTalk.util.AnsiColor;
+
+import java.io.IOException;
 
 import java.time.Instant;
 
@@ -15,7 +21,17 @@ public class ChatService {
     private final SessionRegistry sessionRegistry;
 
     public ChatService(SessionRegistry sessionRegistry) {
+
         this.sessionRegistry = sessionRegistry;
+    }
+
+    private MessageDTO cloneForPrivate(MessageDTO base, String content) {
+        MessageDTO dto = new MessageDTO();
+        dto.setType(base.getType());
+        dto.setSender(base.getSender());
+        dto.setTimestamp(base.getTimestamp());
+        dto.setContent(content);
+        return dto;
     }
 
     public MessageDTO handleJoin(String sessionId, MessageDTO dto) {
@@ -87,4 +103,60 @@ public class ChatService {
         if (input == null) return "";
         return input.replaceAll("[^a-zA-Z0-9_\\s-]", "").trim();
     }
+
+    public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
+
+        String sessionId = senderSession.getId();
+
+        MessageDTO baseMessage = handleMessage(sessionId, dto);
+
+        String targetUsername = sessionRegistry.getTarget(sessionId);
+
+        if (targetUsername == null) {
+            sendSystem(senderSession,
+                    AnsiColor.YELLOW +
+                            "Use /select <username> to start a private chat." +
+                            AnsiColor.RESET
+            );
+            return;
+        }
+
+        WebSocketSession targetSession =
+                sessionRegistry.findSessionByUsername(targetUsername);
+
+        if (targetSession == null || !targetSession.isOpen()) {
+            sendSystem(senderSession,
+                    AnsiColor.RED + "User Offline" + AnsiColor.RESET
+            );
+            sessionRegistry.removeTarget(sessionId);
+            return;
+        }
+
+        MessageDTO toTarget = cloneForPrivate(baseMessage,
+                AnsiColor.GREEN + "[PM] " + baseMessage.getContent() + AnsiColor.RESET);
+
+        targetSession.sendMessage(new TextMessage(
+                new ObjectMapper().writeValueAsString(toTarget)
+        ));
+
+        MessageDTO selfEcho = cloneForPrivate(baseMessage,
+                AnsiColor.CYAN +
+                        "[You → " + targetUsername + "] " +
+                        baseMessage.getContent() +
+                        AnsiColor.RESET);
+
+        senderSession.sendMessage(new TextMessage(
+                new ObjectMapper().writeValueAsString(selfEcho)
+        ));
+    }
+    private void sendSystem(WebSocketSession session, String content) throws IOException {
+        MessageDTO dto = systemMessage(content);
+        session.sendMessage(
+                new TextMessage(
+                        new ObjectMapper().writeValueAsString(dto)
+                )
+        );
+    }
+
+
 }

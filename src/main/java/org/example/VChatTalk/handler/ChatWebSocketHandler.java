@@ -149,8 +149,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
             }
 
-            MessageDTO chat = chatService.handleMessage(sessionId, dto);
-            broadcast(chat, session);
+            if (dto.getType() == MessageType.MESSAGE) {
+                chatService.routeMessage(session, dto);
+            }
+
 
         } catch (IllegalArgumentException | IllegalStateException e) {
             sendError(session, e.getMessage());
@@ -234,7 +236,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             + "/list - List all online users\n"
                             + "/select <name> - Select a user for private chat (1-on-1)\n"
                             + "/exit - Disconnect from the server.\n";
-                    session.sendMessage(new TextMessage("Available commands:\n" + commands));
+                    dto.setType(MessageType.SYSTEM);
+                    dto.setContent("Available commands:\n" + commands);
+                    session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
                 }
 
                 case SELECT -> {
