@@ -18,6 +18,8 @@ public class SessionRegistry {
 
     private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
 
+    private final ConcurrentHashMap<String, String> usernameSessions = new ConcurrentHashMap<>();
+
     // Map of private chat targets: key = sessionId (who is targeting), value = targetUsername (who is being targeted)
     private final ConcurrentHashMap<String, String> sessionTargets = new ConcurrentHashMap<>();
 
@@ -29,22 +31,31 @@ public class SessionRegistry {
     }
 
     public void removeSession(String sessionId) {
-        if(sessionId != null){
-            sessions.remove(sessionId);
-            sessionUsernames.remove(sessionId);
-        }
+        if (sessionId == null) return;
 
+        String username = sessionUsernames.remove(sessionId);
+        if (username != null) {
+            usernameSessions.remove(username);
+        }
+        sessionTargets.remove(sessionId);
+        sessions.remove(sessionId);
+
+        logger.info("Removed session {}", sessionId);
     }
     public String getUsername(String sessionId) {
         return sessionUsernames.getOrDefault(sessionId, "Anonymous");
     }
 
     public synchronized boolean tryRegisterUser(String sessionId, String username) {
-        if (sessionUsernames.containsValue(username)) {
+        if (sessionId == null || username == null || username.isBlank()) {
+            return false;
+        }
+        if (usernameSessions.containsKey(username)) {
             return false;
         }
 
         sessionUsernames.put(sessionId, username);
+        usernameSessions.put(username, sessionId);
 
         logger.info("Registered user: '{}' with session ID: {}", username, sessionId);
         return true;
@@ -56,13 +67,27 @@ public class SessionRegistry {
         }
         return sessions.get(sessionId);
     }
+    /**
+     * Retrieves the {@link WebSocketSession} associated with the given username.
+     * <p>
+     * This method looks up the internal username-to-session mapping and returns
+     * the corresponding {@code WebSocketSession} if one is currently registered.
+     *
+     * @param username the username whose session should be retrieved; may be {@code null}
+     * @return the {@link WebSocketSession} associated with the given username,
+     *         or {@code null} if the username is not registered or if {@code username} is {@code null}
+     */
+    public WebSocketSession findSessionByUsername(String username) {
+        String sessionId = usernameSessions.get(username);
+        return sessionId != null ? sessions.get(sessionId) : null;
+    }
 
     public boolean isUserRegistered(String sessionId) {
         return sessionUsernames.containsKey(sessionId);
     }
 
     public Collection<WebSocketSession> getAllSessions(){
-        return sessions.values();
+        return Collections.unmodifiableCollection(sessions.values());
     }
     public void countSessions(){
         logger.info("Active sessions({})", sessions.size());
@@ -92,12 +117,12 @@ public class SessionRegistry {
 
     // Check if user is online
     public boolean isUserOnline(String username) {
-        if (username == null){
+        if (username == null) {
             return false;
         }
-
-        return sessionUsernames.containsValue(username);
+        return usernameSessions.containsKey(username);
     }
+
 
     // Find list of sessionIds targeting a single username
     public List<String> getSessionsTargeting(String targetUsername) {
@@ -115,6 +140,4 @@ public class SessionRegistry {
 
         return Collections.unmodifiableList(targetingSessions);
     }
-
-
 }
