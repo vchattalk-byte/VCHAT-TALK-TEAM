@@ -150,6 +150,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             }
 
             if (dto.getType() == MessageType.MESSAGE) {
+
+                if (!sessionRegistry.isUserRegistered(sessionId)) {
+                    log.warn("Anonymous user attempted to send a message: {}", dto.getContent());
+                    session.sendMessage(new TextMessage("You must join the chat before sending messages."));
+                    return;
+                }
+
                 chatService.routeMessage(session, dto);
             }
 

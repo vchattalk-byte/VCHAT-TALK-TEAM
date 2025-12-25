@@ -37,10 +37,10 @@ public class SessionRegistry {
         if (username != null) {
             usernameSessions.remove(username);
         }
-            sessionTargets.remove(sessionId);
-            sessions.remove(sessionId);
+        sessionTargets.remove(sessionId);
+        sessions.remove(sessionId);
 
-            logger.info("Removed session {}", sessionId);
+        logger.info("Removed session {}", sessionId);
     }
     public String getUsername(String sessionId) {
         return sessionUsernames.getOrDefault(sessionId, "Anonymous");
@@ -67,6 +67,16 @@ public class SessionRegistry {
         }
         return sessions.get(sessionId);
     }
+    /**
+     * Retrieves the {@link WebSocketSession} associated with the given username.
+     * <p>
+     * This method looks up the internal username-to-session mapping and returns
+     * the corresponding {@code WebSocketSession} if one is currently registered.
+     *
+     * @param username the username whose session should be retrieved; may be {@code null}
+     * @return the {@link WebSocketSession} associated with the given username,
+     *         or {@code null} if the username is not registered or if {@code username} is {@code null}
+     */
     public WebSocketSession findSessionByUsername(String username) {
         String sessionId = usernameSessions.get(username);
         return sessionId != null ? sessions.get(sessionId) : null;

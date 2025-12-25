@@ -20,6 +20,8 @@ public class ChatService {
 
     private final SessionRegistry sessionRegistry;
 
+    private static final ObjectMapper mapper = new ObjectMapper();
+
     public ChatService(SessionRegistry sessionRegistry) {
 
         this.sessionRegistry = sessionRegistry;
