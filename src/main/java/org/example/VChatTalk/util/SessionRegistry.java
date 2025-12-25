@@ -107,12 +107,10 @@ public class SessionRegistry {
 
     // Check if user is online
     public boolean isUserOnline(String username) {
-        if (username == null) return false;
-
-        String sessionId = usernameSessions.get(username);
-        WebSocketSession session = sessions.get(sessionId);
-
-        return session != null && session.isOpen();
+        if (username == null) {
+            return false;
+        }
+        return usernameSessions.containsKey(username);
     }
 
 
