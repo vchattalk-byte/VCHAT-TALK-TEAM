@@ -1,6 +1,8 @@
 package org.example.VChatTalk.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.example.VChatTalk.command.CommandParserService;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
@@ -36,12 +38,15 @@ class ChatWebSocketHandlerTest {
     private WebSocketSession session;
 
     private ChatWebSocketHandler handler;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
 
     @BeforeEach
     void setUp() {
         // Mock leniently to avoid UnnecessaryStubbingException if test fails early
-        handler = new ChatWebSocketHandler(sessionRegistry, chatService, commandParserService);
+        handler = new ChatWebSocketHandler(sessionRegistry, chatService, commandParserService, mapper);
         lenient().when(session.getId()).thenReturn("session-123");
     }
 
