@@ -235,7 +235,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             switch (result.getType()) {
 
                 case NONE -> {
-                   // do nothing
+                    // do nothing
                 }
                 case HELP ->{
                     String commands = "/help - Show available commands\n"
