@@ -4,17 +4,20 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Lightweight WebSocket test client for E2E tests.
+ * Dummy WebSocket client for automated E2E chat tests.
  */
 public class TestClient extends WebSocketClient {
 
     public final String userId;
     private final BlockingQueue<String> receivedMessages = new LinkedBlockingQueue<>();
+    private final List<String> allMessages = new ArrayList<>();
 
     public TestClient(String userId, URI serverUri) {
         super(serverUri);
@@ -30,6 +33,9 @@ public class TestClient extends WebSocketClient {
     public void onMessage(String message) {
         System.out.println("[" + userId + "] received: " + message);
         receivedMessages.add(message);
+        synchronized (allMessages) {
+            allMessages.add(message);
+        }
     }
 
     @Override
@@ -46,7 +52,7 @@ public class TestClient extends WebSocketClient {
     // Commands
     // ----------------------------------------------------------
 
-    /** Join the chat with this userId */
+    /** Join the chat */
     public void join() throws Exception {
         Thread.sleep(500);
         String json = String.format("{\"type\":\"JOIN\",\"sender\":\"%s\"}", userId);
@@ -54,14 +60,14 @@ public class TestClient extends WebSocketClient {
         waitForMessageContaining("joined the chat", 3000);
     }
 
-    /** Select target user for private chat (command format compliant with server) */
+    /** Select target user for private chat */
     public void selectTarget(String targetUserId) throws Exception {
         String json = String.format("{\"type\":\"MESSAGE\",\"content\":\"/select %s\"}", targetUserId);
         send(json);
         Thread.sleep(300);
     }
 
-    /** Send a normal message */
+    /** Send a text message */
     public void sendMessage(String content) throws Exception {
         String json = String.format("{\"type\":\"MESSAGE\",\"content\":\"%s\"}", content);
         send(json);
@@ -72,40 +78,42 @@ public class TestClient extends WebSocketClient {
     // Utility checks
     // ----------------------------------------------------------
 
-    /** Wait for a message containing specific text within a timeout */
+    /** Wait until message containing text appears */
     public boolean waitForMessageContaining(String text, long timeoutMs) throws InterruptedException {
         long end = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < end) {
             String msg = receivedMessages.poll(500, TimeUnit.MILLISECONDS);
-            if (msg != null) {
-                if (msg.contains(text)) return true;
-                receivedMessages.add(msg);
+            if (msg != null && msg.contains(text)) {
+                return true;
             }
         }
-        return false;
+        synchronized (allMessages) {
+            return allMessages.stream().anyMatch(m -> m.contains(text));
+        }
     }
 
-    /** Check for private message from a specific sender */
+    /** Check for private message from specific sender */
     public boolean hasPrivateMessageFrom(String senderId, String contentContains) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 6000;
         while (System.currentTimeMillis() < deadline) {
             String msg = receivedMessages.poll(500, TimeUnit.MILLISECONDS);
-            if (msg != null) {
-                if (msg.contains(senderId) && msg.contains(contentContains)) {
-                    return true;
-                }
-                receivedMessages.add(msg);
+            if (msg != null && msg.contains(senderId) && msg.contains(contentContains)) {
+                return true;
             }
         }
-        return false;
+        synchronized (allMessages) {
+            return allMessages.stream().anyMatch(
+                    m -> m.contains(senderId) && m.contains(contentContains)
+            );
+        }
     }
 
-    /** Wait for welcome message confirming server connection */
+    /** Check for welcome message */
     public boolean waitForWelcome(long timeoutMs) throws InterruptedException {
         return waitForMessageContaining("Welcome! You are connected to the chat server.", timeoutMs);
     }
 
-    /** Check if server returned an error message */
+    /** Check for error response */
     public boolean hasErrorContaining(String errorText, long timeoutMs) throws InterruptedException {
         return waitForMessageContaining(errorText, timeoutMs);
     }
@@ -114,5 +122,8 @@ public class TestClient extends WebSocketClient {
     public void close() {
         super.close();
         receivedMessages.clear();
+        synchronized (allMessages) {
+            allMessages.clear();
+        }
     }
 }
