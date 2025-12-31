@@ -8,6 +8,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Lightweight WebSocket test client for E2E tests.
+ */
 public class TestClient extends WebSocketClient {
 
     public final String userId;
@@ -19,7 +22,7 @@ public class TestClient extends WebSocketClient {
     }
 
     @Override
-    public void onOpen(ServerHandshake handshakedata) {
+    public void onOpen(ServerHandshake handshakeData) {
         System.out.println("[" + userId + "] connected");
     }
 
@@ -39,76 +42,72 @@ public class TestClient extends WebSocketClient {
         ex.printStackTrace();
     }
 
-    // ================== COMMAND METHODS ==================
+    // ----------------------------------------------------------
+    // Commands
+    // ----------------------------------------------------------
 
-    /**
-     * Chọn target user (JSON chuẩn)
-     */
+    /** Join the chat with this userId */
+    public void join() throws Exception {
+        Thread.sleep(500);
+        String json = String.format("{\"type\":\"JOIN\",\"sender\":\"%s\"}", userId);
+        send(json);
+        waitForMessageContaining("joined the chat", 3000);
+    }
+
+    /** Select target user for private chat (command format compliant with server) */
     public void selectTarget(String targetUserId) throws Exception {
-        String json = String.format("{\"type\":\"SELECT\",\"target\":\"%s\"}", targetUserId);
+        String json = String.format("{\"type\":\"MESSAGE\",\"content\":\"/select %s\"}", targetUserId);
         send(json);
         Thread.sleep(300);
     }
 
-    /**
-     * Gửi tin nhắn private (JSON chuẩn)
-     */
+    /** Send a normal message */
     public void sendMessage(String content) throws Exception {
         String json = String.format("{\"type\":\"MESSAGE\",\"content\":\"%s\"}", content);
         send(json);
-        Thread.sleep(200);
+        Thread.sleep(300);
     }
 
-    // ================== WAITING & ASSERT METHODS ==================
+    // ----------------------------------------------------------
+    // Utility checks
+    // ----------------------------------------------------------
 
-    /**
-     * Chờ message chứa text cụ thể, timeout tùy chỉnh
-     */
+    /** Wait for a message containing specific text within a timeout */
     public boolean waitForMessageContaining(String text, long timeoutMs) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
+        long end = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < end) {
             String msg = receivedMessages.poll(500, TimeUnit.MILLISECONDS);
-            if (msg != null && msg.contains(text)) {
-                return true;
-            }
             if (msg != null) {
-                receivedMessages.add(msg); // trả lại queue nếu không match
+                if (msg.contains(text)) return true;
+                receivedMessages.add(msg);
             }
         }
         return false;
     }
 
-    public boolean waitForMessageContaining(String text) throws InterruptedException {
-        return waitForMessageContaining(text, 5000);
+    /** Check for private message from a specific sender */
+    public boolean hasPrivateMessageFrom(String senderId, String contentContains) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 6000;
+        while (System.currentTimeMillis() < deadline) {
+            String msg = receivedMessages.poll(500, TimeUnit.MILLISECONDS);
+            if (msg != null) {
+                if (msg.contains(senderId) && msg.contains(contentContains)) {
+                    return true;
+                }
+                receivedMessages.add(msg);
+            }
+        }
+        return false;
     }
 
-    /**
-     * Chờ welcome message để chắc chắn kết nối ổn định
-     */
+    /** Wait for welcome message confirming server connection */
     public boolean waitForWelcome(long timeoutMs) throws InterruptedException {
         return waitForMessageContaining("Welcome! You are connected to the chat server.", timeoutMs);
     }
 
-    /**
-     * Kiểm tra có nhận tin nhắn private từ sender cụ thể không
-     */
-    public boolean hasPrivateMessageFrom(String senderId, String contentContains) throws InterruptedException {
-        return waitForMessageContaining(senderId) && waitForMessageContaining(contentContains, 1000);
-    }
-
-    /**
-     * Kiểm tra có nhận error message chứa text không
-     */
+    /** Check if server returned an error message */
     public boolean hasErrorContaining(String errorText, long timeoutMs) throws InterruptedException {
         return waitForMessageContaining(errorText, timeoutMs);
-    }
-
-    /**
-     * Debug: in tất cả message đã nhận
-     */
-    public void printAllReceived() {
-        System.out.println("[" + userId + "] All received messages:");
-        receivedMessages.forEach(msg -> System.out.println("  -> " + msg));
     }
 
     @Override
