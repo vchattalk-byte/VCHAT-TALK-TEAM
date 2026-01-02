@@ -20,11 +20,12 @@ public class ChatService {
 
     private final SessionRegistry sessionRegistry;
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
 
-    public ChatService(SessionRegistry sessionRegistry) {
+    public ChatService(SessionRegistry sessionRegistry, ObjectMapper mapper) {
 
         this.sessionRegistry = sessionRegistry;
+        this.mapper = mapper;
     }
 
     private MessageDTO cloneForPrivate(MessageDTO base, String content) {
@@ -138,7 +139,7 @@ public class ChatService {
                 AnsiColor.GREEN + "[PM] " + baseMessage.getContent() + AnsiColor.RESET);
 
         targetSession.sendMessage(new TextMessage(
-                new ObjectMapper().writeValueAsString(toTarget)
+                mapper.writeValueAsString(toTarget)
         ));
 
         MessageDTO selfEcho = cloneForPrivate(baseMessage,
@@ -148,14 +149,14 @@ public class ChatService {
                         AnsiColor.RESET);
 
         senderSession.sendMessage(new TextMessage(
-                new ObjectMapper().writeValueAsString(selfEcho)
+                mapper.writeValueAsString(selfEcho)
         ));
     }
     private void sendSystem(WebSocketSession session, String content) throws IOException {
         MessageDTO dto = systemMessage(content);
         session.sendMessage(
                 new TextMessage(
-                        new ObjectMapper().writeValueAsString(dto)
+                        mapper.writeValueAsString(dto)
                 )
         );
     }

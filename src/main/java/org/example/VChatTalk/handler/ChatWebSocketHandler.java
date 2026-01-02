@@ -36,14 +36,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final ConcurrentHashMap<String, Long> lastMessageTime = new ConcurrentHashMap<>();
     private static final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
     private final ChatService chatService;
-    private static final ObjectMapper mapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final ObjectMapper mapper;
 
-    public ChatWebSocketHandler(SessionRegistry sessionRegistry, ChatService chatService, CommandParserService commandParserService) {
+    public ChatWebSocketHandler(SessionRegistry sessionRegistry, ChatService chatService, CommandParserService commandParserService, ObjectMapper mapper) {
         this.sessionRegistry = sessionRegistry;
         this.chatService = chatService;
         this.commandParserService = commandParserService;
+        this.mapper = mapper;
     }
 
 
