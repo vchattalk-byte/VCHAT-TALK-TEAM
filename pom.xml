@@ -84,6 +84,7 @@
 			<groupId>org.java-websocket</groupId>
 			<artifactId>Java-WebSocket</artifactId>
 			<version>1.5.6</version>
+			<scope>test</scope>
 		</dependency>
 
 
