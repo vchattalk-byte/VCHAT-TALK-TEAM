@@ -251,7 +251,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         break;
                     }
 
-                    String targetUser = result.getTargetUsername();
+                    String targetUser = result.getArgument();
                     String currentUser = sessionRegistry.getUsername(session.getId());
 
                     // Block chat with itself
