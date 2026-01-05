@@ -45,7 +45,9 @@ public class TestClient extends WebSocketClient {
     @Override
     public void onMessage(String message) {
         System.out.println("[" + userId + "] received: " + message);
-        receivedMessages.offer(message); // non-blocking
+        if (!receivedMessages.offer(message)) {
+            System.err.println("[" + userId + "] message queue full, lost message: " + message);
+        }
     }
 
     private static String toHex(byte[] bytes) {
@@ -95,15 +97,13 @@ public class TestClient extends WebSocketClient {
      * Uses snapshot to avoid re-adding or race.
      */
     public boolean waitForMessageContaining(String text, long timeoutMs) throws InterruptedException {
-        final long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            String[] snapshot = receivedMessages.toArray(new String[0]);
-            for (String msg : snapshot) {
-                if (msg != null && msg.contains(text)) return true;
-            }
-            Thread.sleep(50);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (true) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) return false;
+            String msg = receivedMessages.poll(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+            if (msg != null && msg.contains(text)) return true;
         }
-        return false;
     }
 
     public boolean waitForWelcome(long timeoutMs) throws InterruptedException {
@@ -112,9 +112,8 @@ public class TestClient extends WebSocketClient {
 
     @Override
     public void close() {
-        // non-blocking close, avoid calling closeBlocking() here to prevent recursion issues
+        // non-blocking close; just clear messages for cleanup
         super.close();
-        // best-effort cleanup
         receivedMessages.clear();
     }
 
@@ -131,6 +130,7 @@ public class TestClient extends WebSocketClient {
         }
     }
 
+    @Override
     public boolean isClosed() {
         return getReadyState() == org.java_websocket.enums.ReadyState.CLOSED;
     }
