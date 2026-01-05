@@ -59,7 +59,7 @@ class ListCommandTest {
         when(otherSession.getId()).thenReturn("sess-2");
 
         when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
-        when(sessionRegistry.getUsername("sess-2")).thenReturn("Anonymous"); // Sẽ bị lọc bỏ
+        when(sessionRegistry.getUsername("sess-2")).thenReturn("Anonymous"); // This anonymous user should be filtered out
 
         listCommand.execute(session, new CommandResult(CommandType.LIST, null, null));
 

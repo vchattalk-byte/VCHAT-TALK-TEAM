@@ -34,7 +34,7 @@ public class ListCommand implements IChatCommand {
 
         for (WebSocketSession s : sessionRegistry.getAllSessions()) {
             String username = sessionRegistry.getUsername(s.getId());
-            if (username != null && !username.equals("Anonymous")) {
+            if (username != null && !username.equals(MessageConstants.USER_ANONYMOUS)) {
                 users.add(username);
             }
         }

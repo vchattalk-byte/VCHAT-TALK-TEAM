@@ -28,7 +28,7 @@ public class HelpCommand implements IChatCommand {
         helpBuilder.append("Available commands:\n");
 
         for (CommandType type : CommandType.values()) {
-            if (type.getCommand() != null && !type.getCommand().isEmpty()) {
+            if (type != CommandType.NONE && type != CommandType.UNKNOWN && type.getCommand() != null && !type.getCommand().isEmpty()) {
                 helpBuilder.append(String.format("%-15s : %s\n",
                         type.getCommand(),
                         type.getDescription()));

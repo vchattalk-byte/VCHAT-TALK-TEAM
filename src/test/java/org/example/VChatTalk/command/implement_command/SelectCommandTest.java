@@ -17,7 +17,6 @@ import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -50,16 +49,16 @@ class SelectCommandTest {
     @Test
     @DisplayName("Fail if user is not logged in")
     void testExecute_NotLoggedIn() throws IOException {
-        // Giả lập chưa login
+        // Simulator is not logged in yet
         when(session.getId()).thenReturn("sess-1");
         when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(false);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
         selectCommand.execute(session, result);
 
-        // Verify: Phải gửi lỗi ERR_NOT_LOGGED_IN
+        // Verify: The error ERR_NOT_LOGGED_IN must be submitted.
         verify(responder).sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
-        // Verify: Không được set target
+        // Verify: Do not set targets
         verify(sessionRegistry, never()).setTarget(anyString(), anyString());
     }
 
@@ -69,7 +68,7 @@ class SelectCommandTest {
         when(session.getId()).thenReturn("sess-1");
         when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
 
-        // Argument là null
+        // Argument is null
         CommandResult result = new CommandResult(CommandType.SELECT, null, null);
         selectCommand.execute(session, result);
 
@@ -85,7 +84,7 @@ class SelectCommandTest {
         CommandResult result = new CommandResult(CommandType.SELECT, "User Name", null);
         selectCommand.execute(session, result);
 
-        verify(responder).sendError(eq(session), contains("cannot contain spaces"));
+        verify(responder).sendError(eq(session), String.format(MessageConstants.ERR_USERNAME_CONTAIN_SPACE));
     }
 
     @Test

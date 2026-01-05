@@ -3,7 +3,10 @@ package org.example.VChatTalk.command;
 import org.example.VChatTalk.util.AnsiColor;
 
 public class MessageConstants {
-    // Special Charter
+    // --- CONSTANTS ---
+    public static final String USER_ANONYMOUS = "Anonymous";
+
+    // Special Character
     public static final char BELL = '\u0007';
 
     // --- ERROR MESSAGES ---
@@ -18,6 +21,9 @@ public class MessageConstants {
 
     public static final String ERR_INVALID_USERNAME =
             AnsiColor.RED + "Invalid username! Must be 3-20 characters (a-z, 0-9, _, -)." + AnsiColor.RESET;
+
+    public static final String ERR_USERNAME_CONTAIN_SPACE =
+            AnsiColor.RED + "Invalid username format. Username cannot contain spaces." + AnsiColor.RESET;
 
     public static final String ERR_SELF_CHAT =
             AnsiColor.RED + "You cannot chat with yourself!" + AnsiColor.RESET;

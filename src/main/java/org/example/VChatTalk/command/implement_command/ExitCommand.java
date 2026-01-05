@@ -34,7 +34,7 @@ public class ExitCommand implements IChatCommand {
         if (username != null && !username.equals("Anonymous")) {
             try {
                 responder.sendSystem(session, String.format(MessageConstants.MSG_GOODBYE, username));
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
                 // Connection might already be closing
             }
         }

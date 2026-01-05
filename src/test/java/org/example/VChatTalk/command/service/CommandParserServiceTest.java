@@ -17,7 +17,7 @@ class CommandParserServiceTest {
         parser = new CommandParserService();
     }
 
-    // --- HAPPY CASES (Trường hợp đúng) ---
+    // --- HAPPY CASES (Correct case) ---
 
     @Test
     @DisplayName("Parse valid command with argument: /select Alice")
@@ -35,14 +35,14 @@ class CommandParserServiceTest {
         CommandResult result = parser.parse("/list");
 
         assertEquals(CommandType.LIST, result.getType());
-        assertNull(result.getArgument()); // Tham số phải null
+        assertNull(result.getArgument()); // parameter must null
         assertNull(result.getError());
     }
 
     @Test
     @DisplayName("Parse mixed case command: /SeLeCt Bob -> Handled as SELECT")
     void testParseMixedCaseCommand() {
-        // Hệ thống hỗ trợ case-insensitive cho tên lệnh
+        // The system supports case-insensitive command names.
         CommandResult result = parser.parse("/SeLeCt Bob");
 
         assertEquals(CommandType.SELECT, result.getType());
@@ -52,18 +52,14 @@ class CommandParserServiceTest {
     @Test
     @DisplayName("Parse argument with spaces: /send Hello World")
     void testParseArgumentWithSpaces() {
-        // Regex phải lấy trọn vẹn phần sau khoảng trắng đầu tiên
-        // Giả sử ta thêm lệnh /send sau này, ở đây test cơ chế parser
-        // Dùng /login làm ví dụ dù login thường không có dấu cách
-
-        // Test với input thực tế của parser
+        // Test with actual parser input.
         CommandResult result = parser.parse("/select User Name With Spaces");
 
         assertEquals(CommandType.SELECT, result.getType());
         assertEquals("User Name With Spaces", result.getArgument());
     }
 
-    // --- EDGE CASES (Trường hợp biên/Lỗi) ---
+    // --- EDGE CASES (Boundary Case/Error) ---
 
     @Test
     @DisplayName("Parse empty input -> NONE")
@@ -101,7 +97,7 @@ class CommandParserServiceTest {
     void testParseInvalidFormatOnlySlash() {
         CommandResult result = parser.parse("/");
 
-        // Regex yêu cầu /[a-zA-Z0-9]+ nên "/" đứng một mình sẽ không khớp
+        // The regex requires /[a-zA-Z0-9]+ so "/" alone will not match.
         assertEquals(CommandType.UNKNOWN, result.getType());
         assertEquals("Invalid command format.", result.getError());
     }
@@ -109,7 +105,7 @@ class CommandParserServiceTest {
     @Test
     @DisplayName("Parse extra spaces handling")
     void testParseExtraSpaces() {
-        // "/select   Alice" -> Parser sẽ trim khoảng trắng thừa giữa lệnh và tham số
+        // "/select Alice" -> Parser will trim the extra whitespace between the command and the parameter
         CommandResult result = parser.parse("/select    Alice");
 
         assertEquals(CommandType.SELECT, result.getType());

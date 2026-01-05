@@ -41,7 +41,7 @@ class CommandIntegrationTest {
 
         // 2. Wire up the Commands with the Real Registry
         List<IChatCommand> commands = Arrays.asList(
-                new LoginCommand(sessionRegistry, responder),
+                new LoginCommand(sessionRegistry, responder),   // Wait until sprint 6 to deploy.
                 new SelectCommand(sessionRegistry, responder),
                 new ListCommand(sessionRegistry, responder),
                 new HelpCommand(responder),
@@ -107,7 +107,6 @@ class CommandIntegrationTest {
 
         // 1. Select before login
         execute("/select Alice", session);
-        // FIX: Changed "must join" to "login" to match your actual code's error message
         verify(responder).sendError(eq(session), contains("login"));
 
         // 2. Login
@@ -154,5 +153,23 @@ class CommandIntegrationTest {
     private void execute(String commandText, WebSocketSession session) throws IOException {
         CommandResult result = commandParser.parse(commandText);
         commandExecutor.execute(session, result);
+    }
+
+    @Test
+    @DisplayName("Constructor should throw IllegalStateException when duplicate command types exist")
+    void testConstructor_DuplicateCommands() {
+        // Arrange: Create two dummy commands of the same type (e.g., both are SELECT).
+        IChatCommand cmd1 = mock(IChatCommand.class);
+        when(cmd1.getType()).thenReturn(CommandType.SELECT);
+
+        IChatCommand cmd2 = mock(IChatCommand.class);
+        when(cmd2.getType()).thenReturn(CommandType.SELECT); // Duplicate!
+
+        List<IChatCommand> commands = Arrays.asList(cmd1, cmd2);
+
+        // Act & Assert: Expect the constructor to throw an IllegalStateException.
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            new CommandExecutor(commands);
+        });
     }
 }

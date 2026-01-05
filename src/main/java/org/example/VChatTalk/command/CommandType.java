@@ -22,11 +22,13 @@ public enum CommandType {
     private final String command;
     private final String description;
 
+    // Fast Lookup Map: Maps command string -> Enum constant.
+    // Note: We use HashMap instead of EnumMap because the Key is a String ("/select"), not an Enum.
     private static final Map<String, CommandType> COMMAND_MAP = new HashMap<>();
 
+    // Static initializer block: Populates the map once at startup
     static {
         for (CommandType type : values()) {
-            // Only include commands with actual prefixes in the Map (excluding NONE and UNKNOWN).
             if (type.command != null && !type.command.isBlank()) {
                 COMMAND_MAP.put(type.command.toLowerCase(), type);
             }
@@ -38,8 +40,13 @@ public enum CommandType {
         this.description = description;
     }
 
-    // Static lookup function: Finds an Enum based on the command string (input)
-    // Example: Input "/select" -> Returns CommandType.SELECT
+    /**
+     * Finds the CommandType from a command string.
+     * Performance: O(1) lookup using HashMap.
+     *
+     * @param text The raw command text (e.g., "/select", "/SELECT")
+     * @return The matching CommandType, or UNKNOWN if not found.
+     */
     public static CommandType fromString(String text) {
         if (text == null || text.isBlank()) {
             return NONE;

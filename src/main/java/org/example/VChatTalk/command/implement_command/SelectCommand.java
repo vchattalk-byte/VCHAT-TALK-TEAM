@@ -41,9 +41,9 @@ public class SelectCommand implements IChatCommand {
             return;
         }
 
-        // Username can not contain blank
+        // Username cannot contain spaces
         if (targetUser.trim().contains(" ")) {
-            responder.sendError(session, "Invalid username format. Username cannot contain spaces.");
+            responder.sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
             return;
         }
 

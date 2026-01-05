@@ -1,6 +1,7 @@
 package org.example.VChatTalk.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.springframework.stereotype.Component;
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.time.Instant;
 
 @Component
+@Slf4j
 public class SystemResponseSender {
     private final ObjectMapper mapper;
 
@@ -28,16 +30,23 @@ public class SystemResponseSender {
 
     private void send(WebSocketSession session, MessageType type, String content) throws IOException {
         if (session == null || !session.isOpen()) {
+            log.warn("Cannot send '{}' message. Session is null or closed. SessionID: {}",
+                    type, (session != null ? session.getId() : "null"));
             return;
         }
 
-        MessageDTO dto = MessageDTO.builder()
-                .type(type)
-                .sender("System")
-                .content(content)
-                .timestamp(Instant.now())
-                .build();
+        try {
+            MessageDTO dto = MessageDTO.builder()
+                    .type(type)
+                    .sender("System")
+                    .content(content)
+                    .timestamp(Instant.now())
+                    .build();
 
-        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
+        } catch (IOException e) {
+            log.error("Failed to send message to session {}", session.getId(), e);
+            throw e;
+        }
     }
 }

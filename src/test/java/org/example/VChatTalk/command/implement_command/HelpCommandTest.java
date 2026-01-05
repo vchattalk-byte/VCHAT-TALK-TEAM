@@ -63,7 +63,7 @@ class HelpCommandTest {
 
         // Must contain important commands (Randomly check a few commands)
         assertTrue(sentMessage.contains("/help"));
-        assertTrue(sentMessage.contains("/join"));
+        assertTrue(sentMessage.contains("/join")); // sprint 6
         assertTrue(sentMessage.contains("/select"));
         assertTrue(sentMessage.contains("/list"));
         assertTrue(sentMessage.contains("/exit"));
