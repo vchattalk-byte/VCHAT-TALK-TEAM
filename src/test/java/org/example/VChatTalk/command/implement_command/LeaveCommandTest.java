@@ -53,7 +53,7 @@ class LeaveCommandTest {
     void testExecute_AlreadyGlobal() throws IOException {
         when(session.getId()).thenReturn("s1");
         when(sessionRegistry.isUserRegistered("s1")).thenReturn(true);
-        when(sessionRegistry.getTarget("s1")).thenReturn(null); // Không có target
+        when(sessionRegistry.getTarget("s1")).thenReturn(null);
 
         leaveCommand.execute(session, new CommandResult(CommandType.LEAVE, null, null));
 
@@ -66,7 +66,7 @@ class LeaveCommandTest {
     void testExecute_Success() throws IOException {
         when(session.getId()).thenReturn("s1");
         when(sessionRegistry.isUserRegistered("s1")).thenReturn(true);
-        when(sessionRegistry.getTarget("s1")).thenReturn("Alice"); // Đang chat với Alice
+        when(sessionRegistry.getTarget("s1")).thenReturn("Alice");
 
         leaveCommand.execute(session, new CommandResult(CommandType.LEAVE, null, null));
 

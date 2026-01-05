@@ -67,7 +67,7 @@ class LoginCommandTest {
         when(session.getId()).thenReturn("s1");
         when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
 
-        // Tên chứa ký tự đặc biệt @#$
+        // Name contains special characters @#$
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "User@123", null));
 
         verify(responder).sendError(session, MessageConstants.ERR_INVALID_USERNAME);
@@ -78,7 +78,7 @@ class LoginCommandTest {
     void testExecute_UsernameTaken() throws IOException {
         when(session.getId()).thenReturn("s1");
         when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
-        // Giả lập tryRegisterUser trả về false
+        // Simulate tryRegisterUser returning false
         when(sessionRegistry.tryRegisterUser("s1", "DuplicateName")).thenReturn(false);
 
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "DuplicateName", null));

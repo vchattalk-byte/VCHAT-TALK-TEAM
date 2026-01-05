@@ -53,7 +53,7 @@ class ListCommandTest {
     @Test
     @DisplayName("Should return list of registered users only")
     void testExecute_WithUsers() throws IOException {
-        // Giả lập 2 session: 1 đã login (Alice), 1 chưa login (Anonymous)
+        // Simulate two sessions: one logged in (Alice), one not logged in (Anonymous)
         when(sessionRegistry.getAllSessions()).thenReturn(Arrays.asList(session, otherSession));
         when(session.getId()).thenReturn("sess-1");
         when(otherSession.getId()).thenReturn("sess-2");
@@ -63,7 +63,7 @@ class ListCommandTest {
 
         listCommand.execute(session, new CommandResult(CommandType.LIST, null, null));
 
-        // Verify: Chỉ hiện Alice
+        // Verify: Just show Alice
         String expectedMsg = String.format(MessageConstants.MSG_ONLINE_USERS, 1, "Alice");
         verify(responder).sendSystem(session, expectedMsg);
     }

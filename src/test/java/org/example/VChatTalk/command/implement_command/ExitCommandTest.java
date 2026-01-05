@@ -54,13 +54,11 @@ class ExitCommandTest {
     @DisplayName("Do NOT send goodbye if anonymous/null (Fix Goodbye Null bug)")
     void testExecute_AnonymousUser() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.getUsername("s1")).thenReturn("Anonymous"); // Hoặc null
+        when(sessionRegistry.getUsername("s1")).thenReturn("Anonymous");
 
         exitCommand.execute(session, new CommandResult(CommandType.EXIT, null, null));
 
-        // Verify: Không gửi tin nhắn chào
         verify(responder, never()).sendSystem(any(), anyString());
-        // Verify: Nhưng VẪN PHẢI đóng session
         verify(session).close(CloseStatus.NORMAL);
     }
 }

@@ -95,7 +95,7 @@ class SelectCommandTest {
         when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
         when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
 
-        // Target là Alice (chính mình)
+        // Target is Alice (yourself)
         CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
         selectCommand.execute(session, result);
 
@@ -131,9 +131,9 @@ class SelectCommandTest {
         CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
         selectCommand.execute(session, result);
 
-        // Verify quan trọng: Phải gọi setTarget
+        // Important verification: You must call setTarget.
         verify(sessionRegistry).setTarget("sess-1", "Bob");
-        // Verify: Gửi thông báo thành công
+        // Verify: Notification sent successfully
         verify(responder).sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, "Bob"));
     }
 }

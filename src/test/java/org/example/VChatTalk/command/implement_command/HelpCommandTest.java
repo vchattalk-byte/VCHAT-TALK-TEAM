@@ -43,33 +43,32 @@ class HelpCommandTest {
     @Test
     @DisplayName("Execute should send system message with all available commands")
     void testExecute() throws IOException {
-        // Mock input (Result không quan trọng với HelpCommand)
+        // Mock input
         CommandResult result = new CommandResult(CommandType.HELP, null, null);
 
-        // Thực thi
+        // Execute
         helpCommand.execute(session, result);
 
-        // Capture (bắt) lại nội dung tin nhắn đã gửi để kiểm tra
+        // Capture the content of the send message for verification
         ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
 
-        // Verify: responder.sendSystem phải được gọi 1 lần
+        // Verify: responder.sendSystem must be called once.
         verify(responder).sendSystem(org.mockito.ArgumentMatchers.eq(session), messageCaptor.capture());
 
         String sentMessage = messageCaptor.getValue();
 
-        // Kiểm tra nội dung tin nhắn
-        // 1. Phải có tiêu đề
+        // Check message content
+        // Must have a title
         assertTrue(sentMessage.contains("Available commands:"));
 
-        // 2. Phải chứa các lệnh quan trọng (Check ngẫu nhiên vài lệnh)
+        // Must contain important commands (Randomly check a few commands)
         assertTrue(sentMessage.contains("/help"));
         assertTrue(sentMessage.contains("/join"));
         assertTrue(sentMessage.contains("/select"));
         assertTrue(sentMessage.contains("/list"));
         assertTrue(sentMessage.contains("/exit"));
 
-        // 3. Phải chứa mô tả (Description) của lệnh
-        // Ví dụ lệnh SELECT có mô tả "Private chat with user" trong Enum
+        // Must contain a description of the command.
         assertTrue(sentMessage.contains("Private chat with user"));
     }
 }

@@ -41,25 +41,25 @@ class UnknownCommandTest {
     @Test
     @DisplayName("Execute with specific error message from Parser")
     void testExecute_WithSpecificError() throws IOException {
-        // Giả lập Parser trả về lỗi cụ thể: "Invalid command format."
+        // The Parser emulator returns the following specific error: "Invalid command format."
         String errorMsg = "Invalid command format.";
         CommandResult result = new CommandResult(CommandType.UNKNOWN, null, errorMsg);
 
         unknownCommand.execute(session, result);
 
-        // Verify: Phải gửi đúng lỗi đó cho client
+        // Verify: You must send the exact error to the client.
         verify(responder).sendError(session, errorMsg);
     }
 
     @Test
     @DisplayName("Execute with null error message -> Use Default Message")
     void testExecute_WithNullError() throws IOException {
-        // Giả lập trường hợp lỗi null (hiếm gặp nhưng cần handle)
+        // Simulate a null error scenario (rare but needs handling)
         CommandResult result = new CommandResult(CommandType.UNKNOWN, null, null);
 
         unknownCommand.execute(session, result);
 
-        // Verify: Gửi thông báo mặc định
+        // Verify: Send default notifications
         verify(responder).sendError(session, "Unknown command. Type /help for assistance.");
     }
 
