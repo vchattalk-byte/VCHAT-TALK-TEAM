@@ -3,7 +3,7 @@ package org.example.VChatTalk.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.example.VChatTalk.command.CommandParserService;
+import org.example.VChatTalk.command.service.CommandParserService;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.model.MessageDTO;

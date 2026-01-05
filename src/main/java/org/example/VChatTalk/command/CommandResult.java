@@ -9,7 +9,7 @@ public class CommandResult {
 
     private CommandType type;
 
-    private String targetUsername;
+    private String argument;
 
     private String error;
 }
