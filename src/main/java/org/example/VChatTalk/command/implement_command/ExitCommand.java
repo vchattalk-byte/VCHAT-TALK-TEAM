@@ -31,7 +31,7 @@ public class ExitCommand implements IChatCommand {
     public void execute(WebSocketSession session, CommandResult result) throws IOException {
         String username = sessionRegistry.getUsername(session.getId());
 
-        if (username != null && !username.equals("Anonymous")) {
+        if (username != null && !username.equals(MessageConstants.USER_ANONYMOUS)) {
             try {
                 responder.sendSystem(session, String.format(MessageConstants.MSG_GOODBYE, username));
             } catch (IOException ignored) {
