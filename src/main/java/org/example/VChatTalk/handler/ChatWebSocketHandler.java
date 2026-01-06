@@ -173,20 +173,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     }
 
-    /*======== HEPLPER ==========
-     */
-    public void setRateLimitMs(WebSocketSession session) throws  IOException{
-        long now = System.currentTimeMillis();
-        Long last = lastMessageTime.get(session.getId());
-        lastMessageTime.put(session.getId(), now);
-
-        if (last != null && now - last  < RATE_LIMIT_MS) {
-            sendError(session, "You are sending messages too quickly. Please slow down.");
-            throw new IOException("Rate limit exceeded");
-        }
-        lastMessageTime.put(session.getId(), now);
-    }
-
     /**
      * ========== BROADCAST ==========
      */
@@ -232,7 +218,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         dto.setTimestamp(Instant.now());
         session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
     }
-
 
     private void cleanup(Iterator<WebSocketSession> iterator, WebSocketSession s) {
         iterator.remove();
