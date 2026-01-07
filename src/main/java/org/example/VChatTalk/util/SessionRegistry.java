@@ -50,12 +50,12 @@ public class SessionRegistry {
         if (sessionId == null || username == null || username.isBlank()) {
             return false;
         }
-
+        // Step 1: Reserve username atomically
         String existingSession = usernameSessions.putIfAbsent(username, sessionId);
         if (existingSession != null) {
             return false;
         }
-
+        // Step 2: Bind sessionId -> username
         String previousUsername = sessionUsernames.putIfAbsent(sessionId, username);
         if (previousUsername != null) {
             usernameSessions.remove(username, sessionId);
