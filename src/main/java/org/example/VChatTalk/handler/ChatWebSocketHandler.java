@@ -2,6 +2,8 @@ package org.example.VChatTalk.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.example.VChatTalk.command.CommandExecutor;
+import org.example.VChatTalk.command.MessageConstants;
 import org.example.VChatTalk.command.service.CommandParserService;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
@@ -9,6 +11,7 @@ import org.example.VChatTalk.service.ChatService;
 import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
+import org.example.VChatTalk.util.SystemResponseSender;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -16,8 +19,6 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -27,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
+    private final SystemResponseSender systemResponseSender;
     private final SessionRegistry sessionRegistry;
     private final CommandParserService commandParserService;
     private static final long RATE_LIMIT_MS = 200;
@@ -35,12 +37,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
     private final ChatService chatService;
     private final ObjectMapper mapper;
+    private final CommandExecutor commandExecutor;
 
-    public ChatWebSocketHandler(SessionRegistry sessionRegistry, ChatService chatService, CommandParserService commandParserService, ObjectMapper mapper) {
+    public ChatWebSocketHandler(SessionRegistry sessionRegistry, ChatService chatService,
+                                CommandParserService commandParserService, ObjectMapper mapper,
+                                CommandExecutor commandExecutor, SystemResponseSender systemResponseSender) {
         this.sessionRegistry = sessionRegistry;
         this.chatService = chatService;
         this.commandParserService = commandParserService;
         this.mapper = mapper;
+        this.commandExecutor = commandExecutor;
+        this.systemResponseSender = systemResponseSender;
     }
 
 
@@ -52,13 +59,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.addSession(session);
         sessions.add(session);
 
-        MessageDTO welcome = new MessageDTO();
-        welcome.setType(MessageType.SYSTEM);
-        welcome.setSender("System");
-        welcome.setContent("Welcome! You are connected to the chat server.");
-        welcome.setTimestamp(Instant.now());
-        mapper.writeValueAsString(welcome);
-        session.sendMessage(new TextMessage(mapper.writeValueAsString(welcome)));
+        systemResponseSender.sendSystem(session, MessageConstants.MSG_WELCOME);
 
         log.info("[CONNECT] New session: {}", session.getId());
         sessionRegistry.countSessions();
@@ -70,7 +71,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String sessionId = session.getId();
         String username = sessionRegistry.getUsername(sessionId);
 
-        if (!"Anonymous".equals(username)) {
+        if (!MessageConstants.USER_ANONYMOUS.equals(username)) {
             List<String> followers = sessionRegistry.getSessionsTargeting(username);
 
             for (String followerSessionId : followers) {
@@ -81,7 +82,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         // Remove target and reset to global or null
                         sessionRegistry.removeTarget(followerSessionId);
 
-                        sendSystem(followerSession, "User " + username + " has disconnected. Private chat ended.");
+                        systemResponseSender.sendSystem(
+                                followerSession,
+                                String.format(
+                                        MessageConstants.MSG_DISCONNECT_NOTIFY,
+                                        username
+                                )
+                        );
                     } catch (IOException e) {
                         log.error("Error sending disconnect notification: {}", e.getMessage());
                     }
@@ -114,7 +121,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         // rate limit check
         if (last != null && now - last < RATE_LIMIT_MS) {
-            sendError(session, "You are sending messages too quickly. Please slow down.");
+            systemResponseSender.sendError(session, MessageConstants.ERR_RATE_LIMIT);
             return;
         }
         lastMessageTime.put(session.getId(), now);
@@ -128,7 +135,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             if (dto.getType() == MessageType.JOIN) {
                 MessageDTO system = chatService.handleJoin(sessionId, dto);
                 broadcast(system, null);
-                sendSystem(session, "You joined the chat successfully.");
+                systemResponseSender.sendSystem(session, MessageConstants.MSG_JOINED_SUCCESS);
                 return;
             }
 
@@ -140,8 +147,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
                 CommandResult result = commandParserService.parse(dto.getContent());
+
                 if (result.getType() != CommandType.NONE) {
-                    handleCommandResult(session, result);
+                    commandExecutor.execute(session, result);
                     return;
                 }
             }
@@ -150,7 +158,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
                 if (!sessionRegistry.isUserRegistered(sessionId)) {
                     log.warn("Anonymous user attempted to send a message: {}", dto.getContent());
-                    session.sendMessage(new TextMessage("You must join the chat before sending messages."));
+                    session.sendMessage(new TextMessage(MessageConstants.ERR_SEND_MUST_LOGIN));
                     return;
                 }
 
@@ -159,12 +167,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
 
         } catch (IllegalArgumentException | IllegalStateException e) {
-            sendError(session, e.getMessage());
+            systemResponseSender.sendError(session, e.getMessage());
 
         } catch (Exception e) {
             log.warn("[PARSE_ERROR] From [{}]: {}", sessionId, e.getMessage());
-            sendError(session, "Invalid JSON format.");
-
+            systemResponseSender.sendError(session, MessageConstants.ERR_INVALID_JSON);
         }
 
     }
@@ -197,114 +204,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void sendError(WebSocketSession session, String content) throws IOException {
-        MessageDTO dto = new MessageDTO();
-        dto.setType(MessageType.ERROR);
-        dto.setSender("System");
-        dto.setContent(content);
-        dto.setTimestamp(Instant.now());
-        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
-    }
-
-    private void sendSystem(WebSocketSession session, String content) throws IOException {
-        MessageDTO dto = new MessageDTO();
-        dto.setType(MessageType.SYSTEM);
-        dto.setSender("System");
-        dto.setContent(content);
-        dto.setTimestamp(Instant.now());
-        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
-    }
-
-
     private void cleanup(Iterator<WebSocketSession> iterator, WebSocketSession s) {
         iterator.remove();
         sessionRegistry.removeSession(s.getId());
         lastMessageTime.remove(s.getId());
         log.warn("[CLEANUP] Removed dead session {}", s.getId());
-    }
-
-    private void handleCommandResult(WebSocketSession session, CommandResult result) {
-        try {
-            MessageDTO dto = new MessageDTO();
-            dto.setSender("System");
-            dto.setTimestamp(Instant.now());
-
-            switch (result.getType()) {
-
-                case NONE -> {
-                   // do nothing
-                }
-                case HELP ->{
-                    String commands = "/help - Show available commands\n"
-                            + "/join <username> - Join the chat with a username\n"
-                            + "/list - List all online users\n"
-                            + "/select <name> - Select a user for private chat (1-on-1)\n"
-                            + "/exit - Disconnect from the server.\n";
-                    dto.setType(MessageType.SYSTEM);
-                    dto.setContent("Available commands:\n" + commands);
-                    session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
-                }
-
-                case SELECT -> {
-                    if (!sessionRegistry.isUserRegistered(session.getId())) {
-                        sendError(session, "You must join the chat first! Use /join <username>");
-                        break;
-                    }
-
-                    String targetUser = result.getArgument();
-                    String currentUser = sessionRegistry.getUsername(session.getId());
-
-                    // Block chat with itself
-                    if (targetUser.equals(currentUser)) {
-                        sendError(session, "You cannot chat with yourself!");
-                        break;
-                    }
-
-                    // check target is online
-                    if (sessionRegistry.isUserOnline(targetUser)) {
-                        sessionRegistry.setTarget(session.getId(), targetUser);
-
-                        dto.setType(MessageType.SYSTEM);
-                        dto.setContent("Switched to private chat with: " + targetUser);
-                        session.sendMessage(new TextMessage(mapper.writeValueAsString(dto)));
-                    } else {
-                        sendError(session, "User '" + targetUser + "' is offline or does not exist.");
-                    }
-                }
-
-                case LIST -> {
-                    dto.setType(MessageType.SYSTEM);
-
-                    List<String> users = new ArrayList<>();
-
-                    for (WebSocketSession s : sessionRegistry.getAllSessions()) {
-                        String username = sessionRegistry.getUsername(s.getId());
-                        if (username != null) {
-                            users.add(username);
-                        }
-                    }
-
-                    dto.setContent(
-                            users.isEmpty()
-                                    ? "No users online"
-                                    : "Online users: " + String.join(", ", users)
-                    );
-                    session.sendMessage(
-                            new TextMessage(mapper.writeValueAsString(dto))
-                    );
-                }
-
-                case UNKNOWN -> {
-                    dto.setType(MessageType.ERROR);
-                    dto.setContent(result.getError() != null ? result.getError() : "Invalid command. Type /help for assistance.");
-                    session.sendMessage(
-                            new TextMessage(mapper.writeValueAsString(dto))
-                    );
-                }
-            }
-
-        } catch (IOException e) {
-            log.warn("[COMMAND_HANDLE_ERROR] Session {}: {}", session.getId(), e.getMessage());
-        }
     }
 }

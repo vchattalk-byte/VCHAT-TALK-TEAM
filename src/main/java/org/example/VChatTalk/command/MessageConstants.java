@@ -37,6 +37,12 @@ public class MessageConstants {
     public static final String ERR_ALREADY_IN_GLOBAL =
             AnsiColor.RED + "Already in global chat." + AnsiColor.RESET;
 
+    public static final String ERR_RATE_LIMIT = AnsiColor.RED + "You are sending messages too quickly. Please slow down." + AnsiColor.RESET;
+
+    public static final String ERR_SEND_MUST_LOGIN = AnsiColor.RED + "You must join the chat before sending messages. Use /login <name>" + AnsiColor.RESET;
+
+    public static final String ERR_INVALID_JSON = AnsiColor.RED + "Invalid message format." + AnsiColor.RESET;
+
     // --- SYSTEM MESSAGES ---
     public static final String MSG_LOGIN_SUCCESS =
             AnsiColor.CYAN + "Welcome %s! You have joined the chat server." + AnsiColor.RESET;
@@ -49,6 +55,14 @@ public class MessageConstants {
 
     public static final String MSG_NO_USERS =
             AnsiColor.YELLOW + "No users online" + AnsiColor.RESET;
+
+    public static final String MSG_WELCOME = AnsiColor.GREEN +
+            "Connected! You are currently " + USER_ANONYMOUS + ".\n" +
+            "Please use /login <username> to join chat." + AnsiColor.RESET;
+
+    public static final String MSG_DISCONNECT_NOTIFY = "User %s has disconnected. Private chat ended.";
+
+    public static final String MSG_JOINED_SUCCESS = AnsiColor.GREEN + "You joined the chat successfully." + AnsiColor.RESET;
 
     // --- PRIVATE CHAT MESSAGES ---
     public static final String MSG_PRIVATE_CHAT_START =
