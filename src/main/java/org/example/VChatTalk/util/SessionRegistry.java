@@ -46,16 +46,18 @@ public class SessionRegistry {
         return sessionUsernames.getOrDefault(sessionId, "Anonymous");
     }
 
-    public synchronized boolean tryRegisterUser(String sessionId, String username) {
+    public boolean tryRegisterUser(String sessionId, String username) {
         if (sessionId == null || username == null || username.isBlank()) {
             return false;
         }
-        if (usernameSessions.containsKey(username)) {
+        String existingSession =
+                usernameSessions.putIfAbsent(username, sessionId);
+
+        if (existingSession != null) {
             return false;
         }
 
         sessionUsernames.put(sessionId, username);
-        usernameSessions.put(username, sessionId);
 
         logger.info("Registered user: '{}' with session ID: {}", username, sessionId);
         return true;
