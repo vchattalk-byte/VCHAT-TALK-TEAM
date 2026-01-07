@@ -15,7 +15,7 @@ import org.springframework.web.socket.WebSocketSession;
 import java.io.IOException;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -78,5 +78,53 @@ class CommandExecutorTest {
         IChatCommand command = commandExecutor.getCommand(CommandType.JOIN);
 
         assertEquals(joinCommand, command);
+    }
+    @Test
+    @DisplayName("Returns null when command type is not registered")
+    void getCommand_MissingType() {
+        IChatCommand command = commandExecutor.getCommand(CommandType.EXIT);
+
+        assertNull(command);
+    }
+    @Test
+    @DisplayName("Throws exception when UNKNOWN command is not registered")
+    void execute_NoUnknownCommandRegistered() {
+        CommandExecutor executor = new CommandExecutor(List.of(joinCommand));
+
+        CommandResult result = new CommandResult(
+                CommandType.EXIT,
+                null,
+                null
+        );
+
+        assertThrows(NullPointerException.class,
+                () -> executor.execute(session, result)
+        );
+    }
+    @Test
+    @DisplayName("Throws exception when CommandResult is null")
+    void execute_NullResult() {
+        assertThrows(NullPointerException.class,
+                () -> commandExecutor.execute(session, null)
+        );
+    }
+    @Test
+    @DisplayName("Executes UNKNOWN command when CommandType is null")
+    void execute_NullCommandType() throws IOException {
+        CommandResult result = new CommandResult(null, null, null);
+
+        commandExecutor.execute(session, result);
+
+        verify(unknownCommand).execute(session, result);
+    }
+    @Test
+    @DisplayName("Throws exception when duplicate CommandType is registered")
+    void constructor_DuplicateCommandType() {
+        IChatCommand anotherJoin = mock(IChatCommand.class);
+        when(anotherJoin.getType()).thenReturn(CommandType.JOIN);
+
+        assertThrows(IllegalStateException.class,
+                () -> new CommandExecutor(List.of(joinCommand, anotherJoin))
+        );
     }
 }
