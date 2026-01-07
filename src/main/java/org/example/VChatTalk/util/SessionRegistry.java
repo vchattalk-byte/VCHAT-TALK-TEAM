@@ -50,14 +50,17 @@ public class SessionRegistry {
         if (sessionId == null || username == null || username.isBlank()) {
             return false;
         }
-        String existingSession =
-                usernameSessions.putIfAbsent(username, sessionId);
 
+        String existingSession = usernameSessions.putIfAbsent(username, sessionId);
         if (existingSession != null) {
             return false;
         }
 
-        sessionUsernames.put(sessionId, username);
+        String previousUsername = sessionUsernames.putIfAbsent(sessionId, username);
+        if (previousUsername != null) {
+            usernameSessions.remove(username, sessionId);
+            return false;
+        }
 
         logger.info("Registered user: '{}' with session ID: {}", username, sessionId);
         return true;
