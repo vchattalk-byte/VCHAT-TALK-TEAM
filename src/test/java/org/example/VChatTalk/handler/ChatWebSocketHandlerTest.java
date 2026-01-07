@@ -3,6 +3,7 @@ package org.example.VChatTalk.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.example.VChatTalk.command.CommandExecutor;
 import org.example.VChatTalk.command.service.CommandParserService;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
@@ -10,6 +11,7 @@ import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.example.VChatTalk.service.ChatService;
 import org.example.VChatTalk.util.SessionRegistry;
+import org.example.VChatTalk.util.SystemResponseSender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,11 @@ class ChatWebSocketHandlerTest {
     private CommandParserService commandParserService;
     @Mock
     private WebSocketSession session;
+    @Mock
+    private CommandExecutor commandExecutor;
+    @Mock
+    private SystemResponseSender systemResponseSender;
+
 
     private ChatWebSocketHandler handler;
     private final ObjectMapper mapper = new ObjectMapper()
@@ -46,7 +53,7 @@ class ChatWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         // Mock leniently to avoid UnnecessaryStubbingException if test fails early
-        handler = new ChatWebSocketHandler(sessionRegistry, chatService, commandParserService, mapper);
+        handler = new ChatWebSocketHandler(sessionRegistry, chatService, commandParserService, mapper, commandExecutor, systemResponseSender);
         lenient().when(session.getId()).thenReturn("session-123");
     }
 
