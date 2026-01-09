@@ -2,13 +2,12 @@ package org.example.VChatTalk.model;
 
 import lombok.Builder;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.With;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.util.Objects;
 
-@Setter
+
 @Getter
 @Builder
 public class UserSession {
@@ -26,7 +25,8 @@ public class UserSession {
     public boolean equals(Object o) {
         if(this == o) return true;
         if(!(o instanceof UserSession)) return false;
-        return Objects.equals(this.sessionId, ((UserSession) o).sessionId);    }
+        return Objects.equals(this.sessionId, ((UserSession) o).sessionId); // fixed it
+    }
 
     @Override
     public int hashCode() {
