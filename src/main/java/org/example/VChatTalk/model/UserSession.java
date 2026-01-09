@@ -14,20 +14,19 @@ import java.util.Objects;
 public class UserSession {
     private final String sessionId;
     @With
-    private final String username;        // null nếu chưa đăng ký
+    private final String username;
     @With
-    private final String targetUser;      // chat riêng
+    private final String targetUser;
     private final WebSocketSession session;
     @With
-    private final String currentRoomId;   // cho Sprint 6
+    private final String currentRoomId;
 
-    // equals & hashCode dựa trên sessionId
+
     @Override
     public boolean equals(Object o) {
         if(this == o) return true;
         if(!(o instanceof UserSession)) return false;
-        return sessionId.equals(((UserSession) o).sessionId);
-    }
+        return Objects.equals(this.sessionId, ((UserSession) o).sessionId);    }
 
     @Override
     public int hashCode() {
