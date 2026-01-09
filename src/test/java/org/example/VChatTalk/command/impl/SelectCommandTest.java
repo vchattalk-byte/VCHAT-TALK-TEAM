@@ -1,10 +1,11 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
+import org.example.VChatTalk.util.PrivateChatRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,14 +18,16 @@ import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SelectCommandTest {
 
     @Mock
-    private SessionRegistry sessionRegistry;
+    private UserRegistry userRegistry;
+
+    @Mock
+    private PrivateChatRegistry privateChatRegistry;
 
     @Mock
     private SystemResponseSender responder;
@@ -37,7 +40,7 @@ class SelectCommandTest {
     @BeforeEach
     void setUp() {
         // Inject Mocks vào Command
-        selectCommand = new SelectCommand(sessionRegistry, responder);
+        selectCommand = new SelectCommand(userRegistry, responder, privateChatRegistry);
     }
 
     @Test
@@ -51,7 +54,7 @@ class SelectCommandTest {
     void testExecute_NotLoggedIn() throws IOException {
         // Simulator is not logged in yet
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(false);
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(false);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
         selectCommand.execute(session, result);
@@ -59,14 +62,14 @@ class SelectCommandTest {
         // Verify: The error ERR_NOT_LOGGED_IN must be submitted.
         verify(responder).sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
         // Verify: Do not set targets
-        verify(sessionRegistry, never()).setTarget(anyString(), anyString());
+        verify(privateChatRegistry, never()).setTarget(anyString(), anyString());
     }
 
     @Test
     @DisplayName("Fail if argument (target user) is missing")
     void testExecute_MissingArgument() throws IOException {
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
 
         // Argument is null
         CommandResult result = new CommandResult(CommandType.SELECT, null, null);
@@ -79,20 +82,20 @@ class SelectCommandTest {
     @DisplayName("Fail if username contains spaces")
     void testExecute_SpaceInUsername() throws IOException {
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "User Name", null);
         selectCommand.execute(session, result);
 
-        verify(responder).sendError(eq(session), String.format(MessageConstants.ERR_USERNAME_CONTAIN_SPACE));
+        verify(responder).sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
     }
 
     @Test
     @DisplayName("Fail if self-chat")
     void testExecute_SelfChat() throws IOException {
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
 
         // Target is Alice (yourself)
         CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
@@ -105,11 +108,11 @@ class SelectCommandTest {
     @DisplayName("Fail if target user is offline")
     void testExecute_TargetOffline() throws IOException {
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
 
         // Bob offline
-        when(sessionRegistry.isUserOnline("Bob")).thenReturn(false);
+        when(userRegistry.isUserOnline("Bob")).thenReturn(false);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
         selectCommand.execute(session, result);
@@ -121,17 +124,17 @@ class SelectCommandTest {
     @DisplayName("Success: Switch to private chat")
     void testExecute_Success() throws IOException {
         when(session.getId()).thenReturn("sess-1");
-        when(sessionRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
 
         // Bob online
-        when(sessionRegistry.isUserOnline("Bob")).thenReturn(true);
+        when(userRegistry.isUserOnline("Bob")).thenReturn(true);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
         selectCommand.execute(session, result);
 
         // Important verification: You must call setTarget.
-        verify(sessionRegistry).setTarget("sess-1", "Bob");
+        verify(privateChatRegistry).setTarget("sess-1", "Bob");
         // Verify: Notification sent successfully
         verify(responder).sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, "Bob"));
     }

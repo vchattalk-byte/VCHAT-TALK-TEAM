@@ -1,9 +1,11 @@
 package org.example.VChatTalk.command;
 
-import org.example.VChatTalk.command.implement_command.*;
+import org.example.VChatTalk.command.impl.*;
 import org.example.VChatTalk.command.service.CommandParserService;
+import org.example.VChatTalk.util.PrivateChatRegistry;
 import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,9 +26,11 @@ import static org.mockito.Mockito.*;
 class CommandIntegrationTest {
 
     // --- Real Components (The Core Engine) ---
-    private SessionRegistry sessionRegistry;
+    private UserRegistry userRegistry;
+    private PrivateChatRegistry privateChatRegistry;
     private CommandParserService commandParser;
     private CommandExecutor commandExecutor;
+    private SessionRegistry sessionRegistry;
 
     // --- Mocks (External Boundaries only) ---
     @Mock
@@ -35,18 +39,19 @@ class CommandIntegrationTest {
     @BeforeEach
     void setUp() {
         // 1. Instantiate Real Components
-        // We use the REAL SessionRegistry logic you just uploaded.
         sessionRegistry = new SessionRegistry();
         commandParser = new CommandParserService();
+        userRegistry = new UserRegistry();
+        privateChatRegistry = new PrivateChatRegistry();
 
         // 2. Wire up the Commands with the Real Registry
         List<IChatCommand> commands = Arrays.asList(
-                new LoginCommand(sessionRegistry, responder),   // Wait until sprint 6 to deploy.
-                new SelectCommand(sessionRegistry, responder),
-                new ListCommand(sessionRegistry, responder),
+                new LoginCommand(userRegistry, responder),   // Wait until sprint 6 to deploy.
+                new SelectCommand(userRegistry, responder, privateChatRegistry),
+                new ListCommand(userRegistry, responder),
                 new HelpCommand(responder),
-                new LeaveCommand(sessionRegistry, responder),
-                new ExitCommand(sessionRegistry, responder),
+                new LeaveCommand(userRegistry, responder, privateChatRegistry),
+                new ExitCommand(userRegistry, responder),
                 new UnknownCommand(responder)
         );
 
@@ -72,17 +77,17 @@ class CommandIntegrationTest {
         execute("/login Alice", sessionAlice);
 
         // Verify Real Registry State
-        assertEquals("Alice", sessionRegistry.getUsername("sess-alice"));
-        assertTrue(sessionRegistry.isUserOnline("Alice"));
+        assertEquals("Alice", userRegistry.getUsername("sess-alice"));
+        assertTrue(userRegistry.isUserOnline("Alice"));
 
         execute("/login Bob", sessionBob);
-        assertTrue(sessionRegistry.isUserOnline("Bob"));
+        assertTrue(userRegistry.isUserOnline("Bob"));
 
         // --- Phase 3: Private Chat Selection ---
         execute("/select Bob", sessionAlice);
 
         // Verify Target is set in Real Registry
-        assertEquals("Bob", sessionRegistry.getTarget("sess-alice"));
+        assertEquals("Bob", privateChatRegistry.getTarget("sess-alice"));
 
         // Verify Output (FR-12 Check)
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
@@ -94,7 +99,7 @@ class CommandIntegrationTest {
         execute("/leave", sessionAlice);
 
         // Verify Target is removed in Real Registry
-        assertNull(sessionRegistry.getTarget("sess-alice"));
+        assertNull(privateChatRegistry.getTarget("sess-alice"));
         verify(responder).sendSystem(eq(sessionAlice), contains("left private chat"));
     }
 
@@ -139,14 +144,14 @@ class CommandIntegrationTest {
 
         // s1 logs in first
         execute("/login Admin", s1);
-        assertTrue(sessionRegistry.isUserOnline("Admin"));
+        assertTrue(userRegistry.isUserOnline("Admin"));
 
         // s2 tries to take "Admin"
         execute("/login Admin", s2);
 
         // Verify s2 got an error and is NOT registered as Admin
         verify(responder).sendError(eq(s2), contains("already taken"));
-        assertNotEquals("Admin", sessionRegistry.getUsername("s2"));
+        assertNotEquals("Admin", userRegistry.getUsername("s2"));
     }
 
     // Helper for cleaner test code

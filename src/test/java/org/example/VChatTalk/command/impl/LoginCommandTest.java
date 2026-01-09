@@ -1,10 +1,10 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class LoginCommandTest {
 
-    @Mock private SessionRegistry sessionRegistry;
+    @Mock private UserRegistry userRegistry;
     @Mock private SystemResponseSender responder;
     @Mock private WebSocketSession session;
 
@@ -29,7 +29,7 @@ class LoginCommandTest {
 
     @BeforeEach
     void setUp() {
-        loginCommand = new LoginCommand(sessionRegistry, responder);
+        loginCommand = new LoginCommand(userRegistry, responder);
     }
 
     @Test
@@ -41,20 +41,20 @@ class LoginCommandTest {
     @DisplayName("Fail if already logged in")
     void testExecute_AlreadyLoggedIn() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.isUserRegistered("s1")).thenReturn(true);
-        when(sessionRegistry.getUsername("s1")).thenReturn("OldName");
+        when(userRegistry.isUserRegistered("s1")).thenReturn(true);
+        when(userRegistry.getUsername("s1")).thenReturn("OldName");
 
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "NewName", null));
 
         verify(responder).sendError(session, String.format(MessageConstants.ERR_ALREADY_LOGGED_IN, "OldName"));
-        verify(sessionRegistry, never()).tryRegisterUser(anyString(), anyString());
+        verify(userRegistry, never()).tryRegisterUser(anyString(), anyString());
     }
 
     @Test
     @DisplayName("Fail if username argument is missing")
     void testExecute_MissingArg() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
+        when(userRegistry.isUserRegistered("s1")).thenReturn(false);
 
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, null, null));
 
@@ -65,7 +65,7 @@ class LoginCommandTest {
     @DisplayName("Fail if username format invalid (special chars)")
     void testExecute_InvalidFormat() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
+        when(userRegistry.isUserRegistered("s1")).thenReturn(false);
 
         // Name contains special characters @#$
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "User@123", null));
@@ -77,9 +77,9 @@ class LoginCommandTest {
     @DisplayName("Fail if username already taken")
     void testExecute_UsernameTaken() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
+        when(userRegistry.isUserRegistered("s1")).thenReturn(false);
         // Simulate tryRegisterUser returning false
-        when(sessionRegistry.tryRegisterUser("s1", "DuplicateName")).thenReturn(false);
+        when(userRegistry.tryRegisterUser("s1", "DuplicateName")).thenReturn(false);
 
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "DuplicateName", null));
 
@@ -90,8 +90,8 @@ class LoginCommandTest {
     @DisplayName("Success: Register user")
     void testExecute_Success() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.isUserRegistered("s1")).thenReturn(false);
-        when(sessionRegistry.tryRegisterUser("s1", "ValidName")).thenReturn(true);
+        when(userRegistry.isUserRegistered("s1")).thenReturn(false);
+        when(userRegistry.tryRegisterUser("s1", "ValidName")).thenReturn(true);
 
         loginCommand.execute(session, new CommandResult(CommandType.LOGIN, "ValidName", null));
 
