@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -52,5 +54,13 @@ public class UserRegistry {
 
     public String getSessionId(String username) {
         return usernameSessions.get(username);
+    }
+
+    public int countOnlineUsers() {
+        return usernameSessions.size();
+    }
+
+    public Collection<String> getAllOnlineUsers() {
+        return Collections.unmodifiableCollection(usernameSessions.keySet());
     }
 }

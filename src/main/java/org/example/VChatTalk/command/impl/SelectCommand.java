@@ -1,11 +1,12 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.IChatCommand;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
+import org.example.VChatTalk.util.PrivateChatRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -14,11 +15,14 @@ import java.io.IOException;
 @Component
 public class SelectCommand implements IChatCommand {
     private final SystemResponseSender responder;
-    private final SessionRegistry sessionRegistry;
+    private final UserRegistry userRegistry;
+    private final PrivateChatRegistry privateChatRegistry;
 
-    public SelectCommand(SessionRegistry sessionRegistry, SystemResponseSender responder) {
-        this.sessionRegistry = sessionRegistry;
+
+    public SelectCommand(UserRegistry userRegistry, SystemResponseSender responder, PrivateChatRegistry privateChatRegistry) {
+        this.userRegistry = userRegistry;
         this.responder = responder;
+        this.privateChatRegistry = privateChatRegistry;
     }
 
     @Override
@@ -29,7 +33,7 @@ public class SelectCommand implements IChatCommand {
     @Override
     public void execute(WebSocketSession session, CommandResult result) throws IOException {
         // Auth Check
-        if (!sessionRegistry.isUserRegistered(session.getId())) {
+        if (!userRegistry.isUserRegistered(session.getId())) {
             responder.sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
             return;
         }
@@ -48,15 +52,15 @@ public class SelectCommand implements IChatCommand {
         }
 
         // Self Chat Check
-        String currentUser = sessionRegistry.getUsername(session.getId());
+        String currentUser = userRegistry.getUsername(session.getId());
         if (targetUser.equals(currentUser)) {
             responder.sendError(session, MessageConstants.ERR_SELF_CHAT);
             return;
         }
 
         // Online Check & Switch
-        if (sessionRegistry.isUserOnline(targetUser)) {
-            sessionRegistry.setTarget(session.getId(), targetUser);
+        if (userRegistry.isUserOnline(targetUser)) {
+            privateChatRegistry.setTarget(session.getId(), targetUser);
             responder.sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, targetUser));
         } else {
             responder.sendError(session, String.format(MessageConstants.ERR_USER_OFFLINE, targetUser));

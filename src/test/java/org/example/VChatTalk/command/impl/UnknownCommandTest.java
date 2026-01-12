@@ -1,4 +1,4 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;

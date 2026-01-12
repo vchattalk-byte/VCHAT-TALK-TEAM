@@ -1,10 +1,10 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ExitCommandTest {
 
-    @Mock private SessionRegistry sessionRegistry;
+    @Mock private UserRegistry userRegistry;
     @Mock private SystemResponseSender responder;
     @Mock private WebSocketSession session;
 
@@ -30,7 +30,7 @@ class ExitCommandTest {
 
     @BeforeEach
     void setUp() {
-        exitCommand = new ExitCommand(sessionRegistry, responder);
+        exitCommand = new ExitCommand(userRegistry, responder);
     }
 
     @Test
@@ -42,7 +42,7 @@ class ExitCommandTest {
     @DisplayName("Send goodbye if registered")
     void testExecute_RegisteredUser() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.getUsername("s1")).thenReturn("Alice");
+        when(userRegistry.getUsername("s1")).thenReturn("Alice");
 
         exitCommand.execute(session, new CommandResult(CommandType.EXIT, null, null));
 
@@ -54,7 +54,7 @@ class ExitCommandTest {
     @DisplayName("Do NOT send goodbye if username is 'Anonymous'")
     void testExecute_AnonymousUser() throws IOException {
         when(session.getId()).thenReturn("s1");
-        when(sessionRegistry.getUsername("s1")).thenReturn("Anonymous");
+        when(userRegistry.getUsername("s1")).thenReturn("Anonymous");
 
         exitCommand.execute(session, new CommandResult(CommandType.EXIT, null, null));
 

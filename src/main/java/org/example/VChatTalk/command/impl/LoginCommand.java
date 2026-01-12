@@ -1,11 +1,11 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.IChatCommand;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -13,11 +13,11 @@ import java.io.IOException;
 
 @Component
 public class LoginCommand implements IChatCommand {
-    private final SessionRegistry sessionRegistry;
+    private final UserRegistry userRegistry;
     private final SystemResponseSender responder;
 
-    public LoginCommand(SessionRegistry sessionRegistry, SystemResponseSender responder) {
-        this.sessionRegistry = sessionRegistry;
+    public LoginCommand(UserRegistry userRegistry, SystemResponseSender responder) {
+        this.userRegistry = userRegistry;
         this.responder = responder;
     }
 
@@ -29,8 +29,8 @@ public class LoginCommand implements IChatCommand {
     @Override
     public void execute(WebSocketSession session, CommandResult result) throws IOException {
         // 1. Check if already logged in
-        if (sessionRegistry.isUserRegistered(session.getId())) {
-            String currentName = sessionRegistry.getUsername(session.getId());
+        if (userRegistry.isUserRegistered(session.getId())) {
+            String currentName = userRegistry.getUsername(session.getId());
             responder.sendError(session, String.format(MessageConstants.ERR_ALREADY_LOGGED_IN, currentName));
             return;
         }
@@ -49,7 +49,7 @@ public class LoginCommand implements IChatCommand {
         }
 
         // 4. Register
-        boolean success = sessionRegistry.tryRegisterUser(session.getId(), newUsername);
+        boolean success = userRegistry.tryRegisterUser(session.getId(), newUsername);
 
         if (success) {
             responder.sendSystem(session, String.format(MessageConstants.MSG_LOGIN_SUCCESS, newUsername));

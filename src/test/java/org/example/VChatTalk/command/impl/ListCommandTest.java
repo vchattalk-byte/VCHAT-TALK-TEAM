@@ -1,10 +1,10 @@
-package org.example.VChatTalk.command.implement_command;
+package org.example.VChatTalk.command.impl;
 
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
-import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
+import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,12 +18,13 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ListCommandTest {
 
-    @Mock private SessionRegistry sessionRegistry;
+    @Mock private UserRegistry userRegistry;
     @Mock private SystemResponseSender responder;
     @Mock private WebSocketSession session;
     @Mock private WebSocketSession otherSession;
@@ -32,7 +33,7 @@ class ListCommandTest {
 
     @BeforeEach
     void setUp() {
-        listCommand = new ListCommand(sessionRegistry, responder);
+        listCommand = new ListCommand(userRegistry, responder);
     }
 
     @Test
@@ -41,30 +42,33 @@ class ListCommandTest {
     }
 
     @Test
-    @DisplayName("Should return 'No users online' if registry is empty")
+    @DisplayName("Should return 'No users online' if when empty")
     void testExecute_EmptyList() throws IOException {
-        when(sessionRegistry.getAllSessions()).thenReturn(Collections.emptyList());
+        // Arrange: User logged in, but no other users online
+        when(session.getId()).thenReturn("sess-1");
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);  // ✅ THÊM DÒNG NÀY
+        when(userRegistry.getAllOnlineUsers()).thenReturn(Collections.emptyList());
 
+        // Act
         listCommand.execute(session, new CommandResult(CommandType.LIST, null, null));
 
+        // Assert
         verify(responder).sendSystem(session, MessageConstants.MSG_NO_USERS);
     }
 
     @Test
     @DisplayName("Should return list of registered users only")
     void testExecute_WithUsers() throws IOException {
-        // Simulate two sessions: one logged in (Alice), one not logged in (Anonymous)
-        when(sessionRegistry.getAllSessions()).thenReturn(Arrays.asList(session, otherSession));
+        // Arrange: 2 registered users
         when(session.getId()).thenReturn("sess-1");
-        when(otherSession.getId()).thenReturn("sess-2");
+        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+        when(userRegistry.getAllOnlineUsers()).thenReturn(Arrays.asList("Alice", "Bob"));
 
-        when(sessionRegistry.getUsername("sess-1")).thenReturn("Alice");
-        when(sessionRegistry.getUsername("sess-2")).thenReturn("Anonymous"); // This anonymous user should be filtered out
-
+        // Act
         listCommand.execute(session, new CommandResult(CommandType.LIST, null, null));
 
-        // Verify: Just show Alice
-        String expectedMsg = String.format(MessageConstants.MSG_ONLINE_USERS, 1, "Alice");
+        // Assert: Show both users
+        String expectedMsg = String.format(MessageConstants.MSG_ONLINE_USERS, 2, "Alice, Bob");
         verify(responder).sendSystem(session, expectedMsg);
     }
 }
