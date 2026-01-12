@@ -13,7 +13,7 @@ import java.io.IOException;
 
 @Component
 public class LoginCommand implements IChatCommand {
-    private final UserRegistry userRegistry;;
+    private final UserRegistry userRegistry;
     private final SystemResponseSender responder;
 
     public LoginCommand(UserRegistry userRegistry, SystemResponseSender responder) {
