@@ -39,7 +39,7 @@ public class MessageConstants {
 
     public static final String ERR_RATE_LIMIT = AnsiColor.RED + "You are sending messages too quickly. Please slow down." + AnsiColor.RESET;
 
-    public static final String ERR_SEND_MUST_LOGIN = AnsiColor.RED + "You must join the chat before sending messages. Use /login <name>" + AnsiColor.RESET;
+    public static final String ERR_SEND_MUST_LOGIN = AnsiColor.RED + "You must login before before sending messages. Use /login <name>" + AnsiColor.RESET;
 
     public static final String ERR_INVALID_JSON = AnsiColor.RED + "Invalid message format." + AnsiColor.RESET;
 

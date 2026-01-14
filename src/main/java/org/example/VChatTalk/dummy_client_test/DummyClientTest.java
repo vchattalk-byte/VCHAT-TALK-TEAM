@@ -12,6 +12,10 @@ import java.time.Instant;
 import java.util.Scanner;
 import java.util.concurrent.CompletionStage;
 
+/**
+ * Simple CLI WebSocket client for VChat-Talk testing
+ * All logic is handled by server
+ */
 public class DummyClientTest {
 
     private static WebSocket webSocket;
@@ -21,14 +25,14 @@ public class DummyClientTest {
             .registerModule(new JavaTimeModule());
 
     public static void main(String[] args) {
-
-        System.out.println("=== Dummy CLI Chat Client (CHAT-013) ===");
-        System.out.println("Commands:");
-        System.out.println("  /help");
-        System.out.println("  /join <username>");
-        System.out.println("  /send <message>");
-        System.out.println("  /exit");
-        System.out.println("--------------------------------------");
+        System.out.println("=== VChat-Talk CLI Client ===");
+        System.out.println("Getting started:");
+        System.out.println("  1. /login <username>  - Login to connect to the chat");
+        System.out.println("  2. /join <room>       - Join room. Need login first");
+        System.out.println("  3. /select <username> - Private chat. Need login first");
+        System.out.println("  4. /help              - Show all available commands");
+        System.out.println("  5. /exit              - Exit client");
+        System.out.println("----------------------------------------------------");
 
         try {
             HttpClient client = HttpClient.newHttpClient();
@@ -52,8 +56,11 @@ public class DummyClientTest {
                             }
                     ).join();
 
+            System.out.println("Connected to server");
+
         } catch (Exception e) {
             System.out.println("ERROR: Failed to connect to ws://localhost:8080/chat");
+            System.out.println("Make sure the server is running!");
             return;
         }
 
@@ -63,75 +70,40 @@ public class DummyClientTest {
         while (true) {
             String input = scanner.nextLine().trim();
 
-            if (input.startsWith("/join ")) {
-                handleJoin(input);
-            } else if (input.startsWith("/send ")) {
-                handleSend(input);
-            } else if (input.equals("/exit")) {
-                handleExit();
-                break;
-            } else if (input.startsWith("/")) {
-                sendMessage(
-                        MessageDTO.builder()
-                                .type(MessageType.MESSAGE)
-                                .sender(username != null ? username : "unknown")
-                                .content(input)
-                                .timestamp(Instant.now())
-                                .build()
-                );
-            } else {
-                System.out.println("ERROR: Unknown command");
+            if (input.isEmpty()) {
+                System.out.print("> ");
+                continue;
             }
 
-            System.out.print("> ");
+            // Local exit command only
+            if (input.equals("/exit")) {
+                handleExit();
+                break;
+            }
+
+            // Handle /join locally to track username
+            if (input.startsWith("/login ")) {
+                String[] parts = input.split("\\s+", 2);
+                if (parts.length >= 2) {
+                    username = parts[1];
+                }
+            }
+
+            // Send everything to server (including /join)
+            sendMessage(
+                    MessageDTO.builder()
+                            .type(input.startsWith("/login") ? MessageType.JOIN : MessageType.MESSAGE)
+                            .sender(username != null ? username : "Guest")
+                            .content(input.startsWith("/login") ? null : input)
+                            .timestamp(Instant.now())
+                            .build()
+            );
         }
 
         scanner.close();
     }
 
-    // ===================== COMMAND HANDLERS =====================
-
-    private static void handleJoin(String input) {
-        String[] parts = input.split("\\s+", 2);
-
-        if (parts.length < 2 || parts[1].isBlank()) {
-            System.out.println("ERROR: Username cannot be empty");
-            return;
-        }
-
-        username = parts[1];
-
-        sendMessage(
-                MessageDTO.builder()
-                        .type(MessageType.JOIN)
-                        .sender(username)
-                        .timestamp(Instant.now())
-                        .build()
-        );
-    }
-
-    private static void handleSend(String input) {
-        if (username == null) {
-            System.out.println("ERROR: You must /join first");
-            return;
-        }
-
-        String[] parts = input.split("\\s+", 2);
-
-        if (parts.length < 2 || parts[1].isBlank()) {
-            System.out.println("ERROR: Message cannot be empty");
-            return;
-        }
-
-        sendMessage(
-                MessageDTO.builder()
-                        .type(MessageType.MESSAGE)
-                        .sender(username)
-                        .content(parts[1])
-                        .timestamp(Instant.now())
-                        .build()
-        );
-    }
+    // ===================== EXIT COMMAND =====================
 
     private static void handleExit() {
         if (username != null) {
@@ -144,38 +116,46 @@ public class DummyClientTest {
             );
         }
 
-        webSocket.sendClose(
-                WebSocket.NORMAL_CLOSURE,
-                "Client exit"
-        );
-
-        System.out.println("INFO: Exit chat");
+        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Client exit");
+        System.out.println("Goodbye!");
     }
 
-    // ===================== JSON SEND =====================
+    // ===================== SEND/RECEIVE =====================
 
     private static void sendMessage(MessageDTO message) {
         try {
             String json = mapper.writeValueAsString(message);
             webSocket.sendText(json, true);
         } catch (Exception e) {
-            System.out.println("ERROR: Failed to serialize message");
+            System.out.println("ERROR: Failed to send message");
         }
     }
-
-    // ===================== DISPLAY =====================
 
     private static void printIncomingMessage(String json) {
         try {
             MessageDTO message = mapper.readValue(json, MessageDTO.class);
 
-            System.out.printf(
-                    "Sender: %s | Type: %s | Content: %s | Time: %s%n",
-                    message.getSender(),
-                    message.getType(),
-                    message.getContent(),
-                    message.getTimestamp()
-            );
+            System.out.println();
+
+            String content = message.getContent() != null ? message.getContent() : "";
+
+            // Simple display based on message type
+            switch (message.getType()) {
+                case SYSTEM:
+                    System.out.println("[SYSTEM] " + content);
+                    break;
+
+                case ERROR:
+                    System.out.println("[ERROR] " + content);
+                    break;
+
+                case MESSAGE:
+                    System.out.println(message.getSender() + ": " + content);
+                    break;
+
+                default:
+                    System.out.println(message.getSender() + ": " + content);
+            }
 
         } catch (Exception e) {
             System.out.println("[RAW] " + json);
