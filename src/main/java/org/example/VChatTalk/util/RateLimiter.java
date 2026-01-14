@@ -20,14 +20,19 @@ public class RateLimiter {
      */
     public boolean isRateLimitExceeded(String sessionId) {
         long now = System.currentTimeMillis();
-        Long last = lastMessageTime.get(sessionId);
 
-        if (last != null && now - last < RATE_LIMIT_MS) {
-            return true;
-        }
+        boolean[] isSpam = {false};
 
-        lastMessageTime.put(sessionId, now);
-        return false;
+        // Atomic check-and-update
+        Long result = lastMessageTime.compute(sessionId, (key, last) -> {
+            if (last != null && (now - last < RATE_LIMIT_MS)) {
+                isSpam[0] = true;
+                return last; // Keep old time
+            }
+                return now;
+        });
+        // If the map value is NOT 'now', it means we kept the old value -> Spam detected
+        return isSpam[0];
     }
 
     /**
@@ -38,7 +43,6 @@ public class RateLimiter {
             lastMessageTime.remove(sessionId);
         }
     }
-
     /**
      * Clear all rate limit data (for testing/maintenance)
      */

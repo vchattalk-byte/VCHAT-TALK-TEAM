@@ -63,7 +63,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
 
         // Clean up all registries
-        privateChatRegistry.removeTarget(sessionId);
         rateLimiter.removeSession(sessionId);
         sessionRegistry.removeSession(sessionId);
 

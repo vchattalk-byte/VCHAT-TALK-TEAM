@@ -25,12 +25,13 @@ public class DummyClientTest {
             .registerModule(new JavaTimeModule());
 
     public static void main(String[] args) {
-
         System.out.println("=== VChat-Talk CLI Client ===");
         System.out.println("Getting started:");
-        System.out.println("  1. /login <username> - Login to chat");
-        System.out.println("  2. /help            - Show all available commands");
-        System.out.println("  3. /exit            - Exit client");
+        System.out.println("  1. /login <username>  - Login to connect to the chat");
+        System.out.println("  2. /join <room>       - Join room. Need login first");
+        System.out.println("  3. /select <username> - Private chat. Need login first");
+        System.out.println("  4. /help              - Show all available commands");
+        System.out.println("  5. /exit              - Exit client");
         System.out.println("----------------------------------------------------");
 
         try {
@@ -81,7 +82,7 @@ public class DummyClientTest {
             }
 
             // Handle /join locally to track username
-            if (input.startsWith("/join ")) {
+            if (input.startsWith("/login ")) {
                 String[] parts = input.split("\\s+", 2);
                 if (parts.length >= 2) {
                     username = parts[1];
@@ -91,9 +92,9 @@ public class DummyClientTest {
             // Send everything to server (including /join)
             sendMessage(
                     MessageDTO.builder()
-                            .type(input.startsWith("/join") ? MessageType.JOIN : MessageType.MESSAGE)
+                            .type(input.startsWith("/login") ? MessageType.JOIN : MessageType.MESSAGE)
                             .sender(username != null ? username : "Guest")
-                            .content(input.startsWith("/join") ? null : input)
+                            .content(input.startsWith("/login") ? null : input)
                             .timestamp(Instant.now())
                             .build()
             );
@@ -134,7 +135,7 @@ public class DummyClientTest {
         try {
             MessageDTO message = mapper.readValue(json, MessageDTO.class);
 
-            System.out.println(); // New line
+            System.out.println();
 
             String content = message.getContent() != null ? message.getContent() : "";
 

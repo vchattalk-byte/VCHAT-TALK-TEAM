@@ -13,7 +13,6 @@ import org.example.VChatTalk.model.MessageType;
 import org.example.VChatTalk.util.SystemResponseSender;
 import org.example.VChatTalk.util.UserRegistry;
 import org.springframework.stereotype.Service;
-import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
@@ -48,38 +47,24 @@ public class MessageProcessor {
         try {
             MessageDTO dto = mapper.readValue(payload, MessageDTO.class);
 
-            // Handle JOIN message
             if (dto.getType() == MessageType.JOIN) {
                 return handleJoinMessage(session, sessionId, dto);
             }
-
-            // Handle COMMAND message (starts with /)
             if (dto.getType() == MessageType.MESSAGE && isCommand(dto.getContent())) {
                 return handleCommandMessage(session, dto);
             }
-
-            // Handle regular CHAT message
             if (dto.getType() == MessageType.MESSAGE) {
                 return handleChatMessage(session, sessionId, dto);
             }
-
             return true;
 
         } catch (IllegalArgumentException | IllegalStateException e) {
-            try {
-                systemResponseSender.sendError(session, e.getMessage());
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
+            // FIX: Don't throw RuntimeException, just log and notify user
+            sendErrorSafe(session, e.getMessage());
             return false;
-
         } catch (Exception e) {
             log.warn("[PARSE_ERROR] From [{}]: {}", sessionId, e.getMessage());
-            try {
-                systemResponseSender.sendError(session, MessageConstants.ERR_INVALID_JSON);
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
+            sendErrorSafe(session, MessageConstants.ERR_INVALID_JSON);
             return false;
         }
     }
@@ -88,34 +73,31 @@ public class MessageProcessor {
      * Handle JOIN message - user registration
      */
     private boolean handleJoinMessage(WebSocketSession session, String sessionId, MessageDTO dto) {
-        MessageDTO systemMessage = chatService.handleJoin(sessionId, dto);
-        broadcastService.broadcast(systemMessage, null);
         try {
+            MessageDTO systemMessage = chatService.handleJoin(sessionId, dto);
+            broadcastService.broadcast(systemMessage, null);
             systemResponseSender.sendSystem(session, MessageConstants.MSG_JOINED_SUCCESS);
+            return true;
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("Failed to send JOIN response", e);
+            return false;
         }
-        return true;
     }
 
     /**
      * Handle COMMAND message (e.g., /select, /leave, /list)
      */
     private boolean handleCommandMessage(WebSocketSession session, MessageDTO dto) throws IOException {
-
         CommandResult result = commandParserService.parse(dto.getContent());
 
-        if (result.getType() == CommandType.NONE) {
-            return false;
-        }
+        if (result.getType() == CommandType.NONE) return false;
 
-        boolean isPublicCommand =
-                result.getType() == CommandType.LOGIN
-                        || result.getType() == CommandType.HELP;
+        boolean isPublicCommand = result.getType() == CommandType.LOGIN || result.getType() == CommandType.HELP;
 
         if (!isPublicCommand && !userRegistry.isUserRegistered(session.getId())) {
             log.warn("Anonymous user attempted protected command: {}", dto.getContent());
-            session.sendMessage(new TextMessage(MessageConstants.ERR_SEND_MUST_LOGIN));
+            // FIX: Use standardized sender instead of raw session.sendMessage
+            sendErrorSafe(session, MessageConstants.ERR_SEND_MUST_LOGIN);
             return false;
         }
 
@@ -129,11 +111,7 @@ public class MessageProcessor {
     private boolean handleChatMessage(WebSocketSession session, String sessionId, MessageDTO dto) {
         if (!userRegistry.isUserRegistered(sessionId)) {
             log.warn("Anonymous user attempted to send message: {}", dto.getContent());
-            try {
-                session.sendMessage(new TextMessage(MessageConstants.ERR_SEND_MUST_LOGIN));
-            } catch (IOException e) {
-                log.error("Failed to send error message", e);
-            }
+            sendErrorSafe(session, MessageConstants.ERR_SEND_MUST_LOGIN);
             return false;
         }
 
@@ -143,6 +121,15 @@ public class MessageProcessor {
         } catch (IOException e) {
             log.error("Failed to route message", e);
             return false;
+        }
+    }
+
+    // Helper to safely send errors without polluting logic with try-catch blocks
+    private void sendErrorSafe(WebSocketSession session, String message) {
+        try {
+            systemResponseSender.sendError(session, message);
+        } catch (IOException e) {
+            log.debug("Failed to send error message to session {}: {}", session.getId(), e.getMessage());
         }
     }
 
