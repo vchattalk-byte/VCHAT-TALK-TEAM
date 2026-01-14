@@ -46,6 +46,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         log.info("[CONNECT] Session: {}", session.getId());
         sessionRegistry.countSessions();
+        userRegistry.logCountOnlineUsers();
     }
 
     /**
@@ -74,6 +75,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         log.info("[DISCONNECT] {} - Status: {}", sessionId, status.getCode());
         sessionRegistry.countSessions();
+        userRegistry.logCountOnlineUsers();
     }
 
     /**

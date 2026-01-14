@@ -40,4 +40,8 @@ public class SessionRegistry {
     public Collection<WebSocketSession> getAllSessions(){
         return Collections.unmodifiableCollection(sessions.values());
     }
+
+    public void countSessions() {
+        logger.info("All session available: {}", sessions.size());
+    }
 }

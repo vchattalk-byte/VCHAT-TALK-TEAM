@@ -1,5 +1,6 @@
 package org.example.VChatTalk.util;
 
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class UserRegistry {
     private static final Logger logger = LoggerFactory.getLogger(UserRegistry.class);
@@ -62,5 +64,9 @@ public class UserRegistry {
 
     public Collection<String> getAllOnlineUsers() {
         return Collections.unmodifiableCollection(usernameSessions.keySet());
+    }
+
+    public void logCountOnlineUsers() {
+        log.info("All online connections: {}", sessionUsernames.size());
     }
 }
