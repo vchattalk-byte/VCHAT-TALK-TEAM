@@ -1,165 +1,197 @@
-package org.example.VChatTalk.service;
+    package org.example.VChatTalk.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.example.VChatTalk.model.MessageDTO;
-import org.example.VChatTalk.model.MessageType;
-import org.example.VChatTalk.util.SessionRegistry;
-import org.springframework.stereotype.Service;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
-import org.example.VChatTalk.util.AnsiColor;
+    import lombok.RequiredArgsConstructor;
+    import lombok.extern.slf4j.Slf4j;
+    import org.example.VChatTalk.model.MessageDTO;
+    import org.example.VChatTalk.model.MessageType;
+    import org.example.VChatTalk.util.AnsiColor;
+    import org.example.VChatTalk.util.PrivateChatRegistry;
+    import org.example.VChatTalk.util.SessionRegistry;
+    import org.example.VChatTalk.util.UserRegistry;
+    import org.springframework.stereotype.Service;
+    import org.springframework.web.socket.WebSocketSession;
 
-import java.io.IOException;
+    import java.io.IOException;
+    import java.time.Instant;
 
-import java.time.Instant;
+    /**
+     * Core chat business logic service
+     * Handles user join/leave, message processing, and routing
+     */
+    @Slf4j
+    @Service
+    @RequiredArgsConstructor
+    public class ChatService {
 
-@Slf4j
-@Service
-public class ChatService {
+        private final SessionRegistry sessionRegistry;
+        private final UserRegistry userRegistry;
+        private final PrivateChatRegistry privateChatRegistry;
+        private final BroadcastService broadcastService;
 
-    private final SessionRegistry sessionRegistry;
+        // ========== MESSAGE ROUTING ==========
 
-    private final ObjectMapper mapper;
+        /**
+         * Route message to either global chat or private chat based on user's target
+         */
+        public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
+            String sessionId = senderSession.getId();
+            MessageDTO baseMessage = handleMessage(sessionId, dto);
 
-    public ChatService(SessionRegistry sessionRegistry, ObjectMapper mapper) {
+            String targetUsername = privateChatRegistry.getTarget(sessionId);
 
-        this.sessionRegistry = sessionRegistry;
-        this.mapper = mapper;
-    }
-
-    private MessageDTO cloneForPrivate(MessageDTO base, String content) {
-        MessageDTO dto = new MessageDTO();
-        dto.setType(base.getType());
-        dto.setSender(base.getSender());
-        dto.setTimestamp(base.getTimestamp());
-        dto.setContent(content);
-        return dto;
-    }
-
-    public MessageDTO handleJoin(String sessionId, MessageDTO dto) {
-
-        if (sessionRegistry.isUserRegistered(sessionId)) {
-            throw new IllegalStateException("You have already joined the chat.");
+            if (targetUsername != null) {
+                // PRIVATE CHAT MODE
+                handlePrivateMessage(senderSession, baseMessage, targetUsername);
+            } else {
+                // GLOBAL CHAT MODE - broadcast to all
+                broadcastService.broadcast(baseMessage, senderSession);
+            }
         }
 
-        if (dto.getContent() != null && !dto.getContent().isBlank()) {
-            throw new IllegalArgumentException("JOIN message must not contain content.");
+        // ========== JOIN/LEAVE HANDLERS ==========
+
+        /**
+         * Handle user join request
+         * Validates username and registers user
+         */
+        public MessageDTO handleJoin(String sessionId, MessageDTO dto) {
+            if (userRegistry.isUserRegistered(sessionId)) {
+                throw new IllegalStateException("You have already joined the chat.");
+            }
+
+            if (dto.getContent() != null && !dto.getContent().isBlank()) {
+                throw new IllegalArgumentException("JOIN message must not contain content.");
+            }
+
+            String name = sanitize(dto.getSender());
+            if (name.isBlank()) {
+                throw new IllegalArgumentException("Username is required. Please login with a username.");
+            }
+
+            if (name.length() > 20) {
+                throw new IllegalArgumentException("Username is too long (max 20 characters).");
+            }
+
+            boolean success = userRegistry.tryRegisterUser(sessionId, name);
+            if (!success) {
+                throw new IllegalArgumentException("Username '" + name + "' is already taken. Please choose another.");
+            }
+
+            int count = userRegistry.countOnlineUsers();
+            return systemMessage(name + " has joined the chat. (Total: " + count + ")");
         }
 
-        String name = sanitize(dto.getSender());
-        if (name.isBlank()) {
-            name = "Guest_" + sessionId.substring(0, 8);
+        /**
+         * Handle user leave/disconnect
+         * Cleans up user registration and private chat target
+         */
+        public MessageDTO handleLeave(String sessionId) {
+            if (!userRegistry.isUserRegistered(sessionId)) {
+                return null;
+            }
+
+            String username = userRegistry.getUsername(sessionId);
+            userRegistry.removeUser(sessionId);
+            privateChatRegistry.removeTarget(sessionId);
+
+            int count = userRegistry.countOnlineUsers();
+            return systemMessage(username + " has left the chat. (Total: " + count + ")");
         }
 
-        if (name.length() > 20) {
-            throw new IllegalArgumentException("Username is too long (max 20 characters).");
+        // ========== MESSAGE PROCESSING ==========
+
+        /**
+         * Process and validate regular chat message
+         * Sets sender username and timestamp
+         */
+        public MessageDTO handleMessage(String sessionId, MessageDTO dto) {
+            if (!userRegistry.isUserRegistered(sessionId)) {
+                throw new IllegalStateException("Please login before chatting.");
+            }
+
+            if (dto.getContent() == null || dto.getContent().isBlank()) {
+                throw new IllegalArgumentException("Empty message ignored.");
+            }
+
+            dto.setSender(userRegistry.getUsername(sessionId));
+            dto.setType(MessageType.MESSAGE);
+            dto.setTimestamp(Instant.now());
+            return dto;
         }
 
-        boolean success = sessionRegistry.tryRegisterUser(sessionId, name);
-        if (!success) {
-            throw new IllegalArgumentException("Username '" + name + "' is already taken. Please choose another.");
+        // ========== PRIVATE METHODS ==========
+
+        /**
+         * Handle private message routing
+         * Validates target user and sends message to both sender and receiver
+         */
+        private void handlePrivateMessage(WebSocketSession sender, MessageDTO message, String targetUsername)
+                throws IOException {
+
+            // Find target session using UserRegistry
+            String targetSessionId = userRegistry.getSessionId(targetUsername);
+            if (targetSessionId == null) {
+                sendUserOfflineMessage(sender, targetUsername);
+                return;
+            }
+
+            WebSocketSession targetSession = sessionRegistry.findSessionById(targetSessionId);
+            if (targetSession == null || !targetSession.isOpen()) {
+                sendUserOfflineMessage(sender, targetUsername);
+                return;
+            }
+
+            // Send PM to target with [PM] prefix
+            MessageDTO toTarget = MessageDTO.builder()
+                    .type(message.getType())
+                    .sender(message.getSender())
+                    .timestamp(message.getTimestamp())
+                    .content(AnsiColor.GREEN + "[PM] " + message.getContent() + AnsiColor.RESET)
+                    .build();
+            broadcastService.sendToSession(targetSession, toTarget);
+
+            // Echo to sender with [You → target] prefix
+            MessageDTO selfEcho = MessageDTO.builder()
+                    .type(message.getType())
+                    .sender(message.getSender())
+                    .timestamp(message.getTimestamp())
+                    .content(AnsiColor.CYAN + "[You → " + targetUsername + "] " +
+                            message.getContent() + AnsiColor.RESET)
+                    .build();
+            broadcastService.sendToSession(sender, selfEcho);
+
+            log.info("[PRIVATE_MSG] {} → {}: {}", message.getSender(), targetUsername, message.getContent());
         }
 
-
-        int count = sessionRegistry.getAllSessions().size();
-        return systemMessage(name + " has joined the chat. (Total: " + count + ")");
-    }
-
-    public MessageDTO handleMessage(String sessionId, MessageDTO dto) {
-
-        if (!sessionRegistry.isUserRegistered(sessionId)) {
-            throw new IllegalStateException("Please send a JOIN message before chatting.");
-        }
-
-        if (dto.getContent() == null || dto.getContent().isBlank()) {
-            throw new IllegalArgumentException("Empty message ignored.");
-        }
-
-        dto.setSender(sessionRegistry.getUsername(sessionId));
-        dto.setType(MessageType.MESSAGE);
-        dto.setTimestamp(Instant.now());
-        return dto;
-    }
-
-    public MessageDTO handleLeave(String sessionId) {
-        if (!sessionRegistry.isUserRegistered(sessionId)) {
-            return null;
-        }
-
-        String username = sessionRegistry.getUsername(sessionId);
-        sessionRegistry.removeSession(sessionId);
-        int count = sessionRegistry.getAllSessions().size();
-        return systemMessage(username + " has left the chat. (Total: " + count + ")");
-    }
-
-    private MessageDTO systemMessage(String content) {
-        MessageDTO dto = new MessageDTO();
-        dto.setType(MessageType.SYSTEM);
-        dto.setSender("System");
-        dto.setContent(content);
-        dto.setTimestamp(Instant.now());
-        return dto;
-    }
-
-    private String sanitize(String input) {
-        if (input == null) return "";
-        return input.replaceAll("[^a-zA-Z0-9_\\s-]", "").trim();
-    }
-
-    public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
-
-        String sessionId = senderSession.getId();
-
-        MessageDTO baseMessage = handleMessage(sessionId, dto);
-
-        String targetUsername = sessionRegistry.getTarget(sessionId);
-
-        if (targetUsername == null) {
-            sendSystem(senderSession,
-                    AnsiColor.YELLOW +
-                            "Use /select <username> to start a private chat." +
-                            AnsiColor.RESET
+        /**
+         * Send "user offline" notification and remove target
+         */
+        private void sendUserOfflineMessage(WebSocketSession session, String targetUsername) throws IOException {
+            MessageDTO offlineMsg = systemMessage(
+                    AnsiColor.RED + "User '" + targetUsername + "' is offline. " +
+                            "Returning to global chat." + AnsiColor.RESET
             );
-            return;
+            broadcastService.sendToSession(session, offlineMsg);
+            privateChatRegistry.removeTarget(session.getId());
         }
 
-        WebSocketSession targetSession =
-                sessionRegistry.findSessionByUsername(targetUsername);
-
-        if (targetSession == null || !targetSession.isOpen()) {
-            sendSystem(senderSession,
-                    AnsiColor.RED + "User Offline" + AnsiColor.RESET
-            );
-            sessionRegistry.removeTarget(sessionId);
-            return;
+        /**
+         * Create system message DTO
+         */
+        private MessageDTO systemMessage(String content) {
+            return MessageDTO.builder()
+                    .type(MessageType.SYSTEM)
+                    .sender("System")
+                    .content(content)
+                    .timestamp(Instant.now())
+                    .build();
         }
 
-        MessageDTO toTarget = cloneForPrivate(baseMessage,
-                AnsiColor.GREEN + "[PM] " + baseMessage.getContent() + AnsiColor.RESET);
-
-        targetSession.sendMessage(new TextMessage(
-                mapper.writeValueAsString(toTarget)
-        ));
-
-        MessageDTO selfEcho = cloneForPrivate(baseMessage,
-                AnsiColor.CYAN +
-                        "[You → " + targetUsername + "] " +
-                        baseMessage.getContent() +
-                        AnsiColor.RESET);
-
-        senderSession.sendMessage(new TextMessage(
-                mapper.writeValueAsString(selfEcho)
-        ));
+        /**
+         * Sanitize username input - remove special characters
+         */
+        private String sanitize(String input) {
+            if (input == null) return "";
+            return input.replaceAll("[^a-zA-Z0-9_\\s-]", "").trim();
+        }
     }
-    private void sendSystem(WebSocketSession session, String content) throws IOException {
-        MessageDTO dto = systemMessage(content);
-        session.sendMessage(
-                new TextMessage(
-                        mapper.writeValueAsString(dto)
-                )
-        );
-    }
-
-
-}
