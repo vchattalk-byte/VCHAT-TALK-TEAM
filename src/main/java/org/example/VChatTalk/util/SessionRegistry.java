@@ -42,6 +42,6 @@ public class SessionRegistry {
     }
 
     public void countSessions() {
-        logger.info("All session available: {}", sessions.size());
+        logger.info("All sessions available: {}", sessions.size());
     }
 }
