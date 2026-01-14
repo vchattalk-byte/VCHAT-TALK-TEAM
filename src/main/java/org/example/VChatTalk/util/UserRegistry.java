@@ -63,4 +63,8 @@ public class UserRegistry {
     public Collection<String> getAllOnlineUsers() {
         return Collections.unmodifiableCollection(usernameSessions.keySet());
     }
+
+    public void logCountOnlineUsers() {
+        logger.info("All online connections: {}", sessionUsernames.size());
+    }
 }
