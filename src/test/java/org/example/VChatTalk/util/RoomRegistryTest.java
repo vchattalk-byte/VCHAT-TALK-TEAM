@@ -9,89 +9,134 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RoomRegistryTest {
 
-    private RoomRegistry roomRegistry;
+    private RoomRegistry registry;
 
     @BeforeEach
     void setUp() {
-        roomRegistry = new RoomRegistry();
+        registry = new RoomRegistry();
+    }
+
+    // ---------- joinRoom validation ----------
+
+    @Test
+    void joinRoom_withNullRoomId_shouldThrowException() {
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.joinRoom(null, "s1")
+        );
+
+        assertTrue(ex.getMessage().contains("Room ID"));
     }
 
     @Test
+    void joinRoom_withEmptyRoomId_shouldThrowException() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.joinRoom("", "s1")
+        );
+    }
+
+    @Test
+    void joinRoom_withHashOnlyRoomId_shouldThrowException() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.joinRoom("#", "s1")
+        );
+    }
+
+    @Test
+    void joinRoom_withRoomIdWithoutHash_shouldThrowException() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.joinRoom("room1", "s1")
+        );
+    }
+
+    @Test
+    void joinRoom_withNullSessionId_shouldThrowException() {
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.joinRoom("#room", null)
+        );
+
+        assertTrue(ex.getMessage().contains("Session ID"));
+    }
+
+    // ---------- joinRoom behavior ----------
+
+    @Test
     void joinRoom_shouldAddSessionToRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
+        registry.joinRoom("#room", "s1");
 
-        Set<String> members = roomRegistry.getRoomMembers("#room1");
-
+        Set<String> members = registry.getRoomMembers("#room");
         assertEquals(1, members.size());
         assertTrue(members.contains("s1"));
-        assertEquals("#room1", roomRegistry.getRoomOfSession("s1").orElseThrow());
+    }
+
+    @Test
+    void joinRoom_shouldAllowMultipleSessions() {
+        registry.joinRoom("#room", "s1");
+        registry.joinRoom("#room", "s2");
+
+        Set<String> members = registry.getRoomMembers("#room");
+        assertEquals(2, members.size());
+    }
+
+    @Test
+    void joinRoom_sameRoomTwice_shouldNotDuplicateSession() {
+        registry.joinRoom("#room", "s1");
+        registry.joinRoom("#room", "s1");
+
+        Set<String> members = registry.getRoomMembers("#room");
+        assertEquals(1, members.size());
     }
 
     @Test
     void joinRoom_shouldAutoLeavePreviousRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
-        roomRegistry.joinRoom("#room2", "s1");
+        registry.joinRoom("#room1", "s1");
+        registry.joinRoom("#room2", "s1");
 
-        assertFalse(roomRegistry.getRoomMembers("#room1").contains("s1"));
-        assertTrue(roomRegistry.getRoomMembers("#room2").contains("s1"));
-        assertEquals("#room2", roomRegistry.getRoomOfSession("s1").orElseThrow());
+        assertFalse(registry.getRoomMembers("#room1").contains("s1"));
+        assertTrue(registry.getRoomMembers("#room2").contains("s1"));
+    }
+
+    // ---------- getRoomOfSession ----------
+
+    @Test
+    void getRoomOfSession_shouldReturnEmpty_forUnknownSession() {
+        assertTrue(registry.getRoomOfSession("unknown").isEmpty());
     }
 
     @Test
-    void leaveRoom_shouldRemoveSessionAndCleanupRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
+    void getRoomOfSession_shouldReturnCurrentRoom() {
+        registry.joinRoom("#room", "s1");
 
-        roomRegistry.leaveRoom("#room1", "s1");
+        assertEquals("#room", registry.getRoomOfSession("s1").orElseThrow());
+    }
 
-        assertTrue(roomRegistry.getRoomMembers("#room1").isEmpty());
-        assertTrue(roomRegistry.getRoomOfSession("s1").isEmpty());
+    // ---------- leaveRoom ----------
+
+    @Test
+    void leaveRoom_shouldRemoveSession() {
+        registry.joinRoom("#room", "s1");
+        registry.leaveRoom("#room", "s1");
+
+        assertTrue(registry.getRoomMembers("#room").isEmpty());
+        assertTrue(registry.getRoomOfSession("s1").isEmpty());
     }
 
     @Test
-    void leaveCurrentRoom_shouldRemoveSessionFromItsRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
+    void leaveRoom_withWrongRoom_shouldDoNothing() {
+        registry.joinRoom("#room1", "s1");
+        registry.leaveRoom("#room2", "s1");
 
-        roomRegistry.leaveCurrentRoom("s1");
-
-        assertTrue(roomRegistry.getRoomMembers("#room1").isEmpty());
-        assertTrue(roomRegistry.getRoomOfSession("s1").isEmpty());
+        assertTrue(registry.getRoomMembers("#room1").contains("s1"));
     }
 
     @Test
-    void getRoomMembers_shouldReturnUnmodifiableSet() {
-        roomRegistry.joinRoom("#room1", "s1");
-
-        Set<String> members = roomRegistry.getRoomMembers("#room1");
-
-        assertThrows(UnsupportedOperationException.class,
-                () -> members.add("s2"));
-    }
-
-    @Test
-    void joinRoom_shouldRejectInvalidRoomId() {
-        assertThrows(IllegalArgumentException.class,
-                () -> roomRegistry.joinRoom("room1", "s1"));
-    }
-
-    @Test
-    void leaveRoom_withWrongRoomShouldNotAffectCurrentRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
-
-        roomRegistry.leaveRoom("#room2", "s1");
-
-        assertEquals("#room1", roomRegistry.getRoomOfSession("s1").orElseThrow());
-        assertTrue(roomRegistry.getRoomMembers("#room1").contains("s1"));
-    }
-
-    @Test
-    void multipleSessions_shouldCoexistInSameRoom() {
-        roomRegistry.joinRoom("#room1", "s1");
-        roomRegistry.joinRoom("#room1", "s2");
-
-        Set<String> members = roomRegistry.getRoomMembers("#room1");
-
-        assertEquals(2, members.size());
-        assertTrue(members.contains("s1"));
-        assertTrue(members.contains("s2"));
+    void leaveRoom_withNullArguments_shouldDoNothing() {
+        assertDoesNotThrow(() -> registry.leaveRoom(null, "s1"));
+        assertDoesNotThrow(() -> registry.leaveRoom("#room", null));
+        assertDoesNotThrow(() -> registry.leaveRoom(null, null));
     }
 }

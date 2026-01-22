@@ -34,13 +34,13 @@ public class RoomRegistry {
      */
     public void joinRoom(String roomId, String sessionId) {
         // Validation: Fail fast for programming errors, but use DEBUG to reduce noise
-        if (roomId == null || !roomId.startsWith("#")) {
+        if (roomId == null || !roomId.startsWith("#") || roomId.length() <= 1) {
             log.debug("Join failed: Invalid roomId format '{}'", roomId);
-            throw new IllegalArgumentException("Room ID must start with '#'");
+            throw new IllegalArgumentException("Room ID must start with '#' and contain a name");
         }
         if (sessionId == null) {
             log.debug("Join failed: sessionId is null");
-            return;
+            throw new IllegalArgumentException("Session ID must not be null");
         }
 
         // 1. Invariant Enforcement: Atomically update index
@@ -95,14 +95,14 @@ public class RoomRegistry {
      * Helper to clean up roomSessions map
      */
     private void removeFromRoomSet(String roomId, String sessionId) {
-        Set<String> members = roomSessions.get(roomId);
-        if (members != null) {
+        roomSessions.computeIfPresent(roomId, (id, members) -> {
             members.remove(sessionId);
             if (members.isEmpty()) {
-                roomSessions.remove(roomId);
                 log.debug("Room [{}] is empty and removed", roomId);
+                return null; // remove this room from the map
             }
-        }
+            return members;
+        });
     }
 
     /**
