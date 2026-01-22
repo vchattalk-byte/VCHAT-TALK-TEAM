@@ -2,8 +2,11 @@
 
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
+    import org.example.VChatTalk.command.MessageConstants;
+    import org.example.VChatTalk.model.ChatContext;
     import org.example.VChatTalk.model.MessageDTO;
     import org.example.VChatTalk.model.MessageType;
+    import org.example.VChatTalk.model.UserSession;
     import org.example.VChatTalk.util.AnsiColor;
     import org.example.VChatTalk.util.PrivateChatRegistry;
     import org.example.VChatTalk.util.SessionRegistry;
@@ -35,16 +38,32 @@
          */
         public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
             String sessionId = senderSession.getId();
-            MessageDTO baseMessage = handleMessage(sessionId, dto);
 
-            String targetUsername = privateChatRegistry.getTarget(sessionId);
+            // Auth Check (Get Logical Session)
+            UserSession userSession = userRegistry.getSession(sessionId);
+            if (userSession == null || MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
+                throw new IllegalStateException("Please login before chatting.");
+            }
 
-            if (targetUsername != null) {
-                // PRIVATE CHAT MODE
-                handlePrivateMessage(senderSession, baseMessage, targetUsername);
-            } else {
-                // GLOBAL CHAT MODE - broadcast to all
-                broadcastService.broadcast(baseMessage, senderSession);
+            // Prepare Base Message
+            MessageDTO message = handleMessage(sessionId, dto);
+
+            // Route based on Context
+            ChatContext context = userSession.getContext();
+
+            switch (context) {
+                case PRIVATE -> {
+                    String targetUser = privateChatRegistry.getTarget(sessionId);
+                    if (targetUser != null) {
+                        handlePrivateMessage(senderSession, message, targetUser);
+                    } else {
+                        // Fallback error if state is inconsistent
+                        broadcastService.sendToSession(senderSession,
+                                systemMessage(AnsiColor.RED + "Error: Private chat target lost." + AnsiColor.RESET));
+                    }
+                }
+                case ROOM -> handleRoomMessage(senderSession, message);
+                case GLOBAL -> broadcastService.broadcast(message, senderSession);
             }
         }
 
@@ -91,8 +110,6 @@
             }
 
             String username = userRegistry.getUsername(sessionId);
-            userRegistry.removeUser(sessionId);
-            privateChatRegistry.removeTarget(sessionId);
 
             int count = userRegistry.countOnlineUsers();
             return systemMessage(username + " has left the chat. (Total: " + count + ")");
@@ -161,6 +178,13 @@
             broadcastService.sendToSession(sender, selfEcho);
 
             log.info("[PRIVATE_MSG] {} → {}: {}", message.getSender(), targetUsername, message.getContent());
+        }
+
+        /**
+         * Handles broadcasting a message to a specific room.
+         */
+        private void handleRoomMessage(WebSocketSession senderSession, MessageDTO message) throws IOException {
+            // 🟡 TODO: Update and Uncomment when RoomRegistry is ready
         }
 
         /**

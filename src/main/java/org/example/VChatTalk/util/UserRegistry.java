@@ -1,5 +1,7 @@
 package org.example.VChatTalk.util;
 
+import org.example.VChatTalk.command.MessageConstants;
+import org.example.VChatTalk.model.UserSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -12,18 +14,44 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UserRegistry {
     private static final Logger logger = LoggerFactory.getLogger(UserRegistry.class);
 
-    private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
+    // Primary Store: SessionID -> UserSession (State)
+    private final ConcurrentHashMap<String, UserSession> sessionUsernames = new ConcurrentHashMap<>();
+
+    // Secondary Index: Username -> SessionID (Lookup)
     private final ConcurrentHashMap<String, String> usernameSessions = new ConcurrentHashMap<>();
 
+    /**
+     * Initialize logical state for a new connection.
+     * @param sessionId The ID from the WebSocketSession
+     */
+    public void addSession(String sessionId) {
+        if (sessionId == null) {
+            logger.debug("UserRegistry addSession failed: sessionId is null.");
+            return;
+        }
+        sessionUsernames.put(sessionId, UserSession.create(sessionId));
+    }
+
+    /**
+     * Attempts to register a username.
+     */
     public boolean tryRegisterUser(String sessionId, String username) {
-        if (sessionId == null || username == null || username.isBlank()) return false;
+        if (sessionId == null || username == null || username.isBlank()) {
+            return false;
+        }
 
+        // Check if username taken
         String existingSession = usernameSessions.putIfAbsent(username, sessionId);
-        if (existingSession != null) return false;
+        if (existingSession != null) {
+            return false;
+        }
+        // Update UserSession State
+        UserSession updated = sessionUsernames.computeIfPresent(sessionId, (id, userSession) ->
+                userSession.withUsername(username)
+        );
 
-        String previousUsername = sessionUsernames.putIfAbsent(sessionId, username);
-        if (previousUsername != null) {
-            usernameSessions.remove(username, sessionId);
+        if (updated == null) {
+            usernameSessions.remove(username); // Rollback if session gone
             return false;
         }
 
@@ -31,24 +59,54 @@ public class UserRegistry {
         return true;
     }
 
-    public void removeUser(String sessionId) {
-        if (sessionId == null) return;
-        String username = sessionUsernames.remove(sessionId);
-        if (username != null) {
-            usernameSessions.remove(username);
+    /**
+     * Update the entire session state (e.g. changing Context).
+     */
+    public void updateUser(UserSession session) {
+        if (session != null) {
+            sessionUsernames.put(session.getSessionId(), session);
         }
     }
 
+    /**
+     * Remove user state on disconnect.
+     */
+    public void removeUser(String sessionId) {
+        if (sessionId == null) {
+            logger.debug("UserRegistry removeUser failed: sessionId is null.");
+            return;
+        }
+
+        UserSession removed = sessionUsernames.remove(sessionId);
+
+        if (removed != null && !MessageConstants.USER_ANONYMOUS.equals(removed.getUsername())) {
+            usernameSessions.remove(removed.getUsername());
+            logger.info("Removed user: '{}'", removed.getUsername());
+        }
+    }
+
+    // ========== LOOKUP METHODS ==========
+
+    public UserSession getSession(String sessionId) {
+        return sessionUsernames.get(sessionId);
+    }
+
     public String getUsername(String sessionId) {
-        return sessionUsernames.getOrDefault(sessionId, "Anonymous");
+        UserSession session = sessionUsernames.get(sessionId);
+        return (session != null) ? session.getUsername() : MessageConstants.USER_ANONYMOUS;
     }
 
     public boolean isUserRegistered(String sessionId) {
-        return sessionUsernames.containsKey(sessionId);
+        UserSession session = sessionUsernames.get(sessionId);
+        return session != null && !MessageConstants.USER_ANONYMOUS.equals(session.getUsername());
     }
 
     public boolean isUserOnline(String username) {
-        if (username == null) return false;
+        if (username == null) {
+            logger.debug("isUserOnline failed: username is null.");
+            return false;
+        }
+
         return usernameSessions.containsKey(username);
     }
 
@@ -65,6 +123,7 @@ public class UserRegistry {
     }
 
     public void logCountOnlineUsers() {
-        logger.info("All online connections: {}", sessionUsernames.size());
+        int count = Math.max(0, countOnlineUsers() - 1);
+        logger.info("All online connections: {}", count);
     }
 }

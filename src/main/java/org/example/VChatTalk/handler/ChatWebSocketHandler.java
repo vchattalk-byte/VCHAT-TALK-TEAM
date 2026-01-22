@@ -26,22 +26,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final SessionRegistry sessionRegistry;
     private final UserRegistry userRegistry;
     private final PrivateChatRegistry privateChatRegistry;
+    // private final RoomRegistry roomRegistry; // 🟡 TODO: Uncomment when RoomRegistry is ready
     private final ChatService chatService;
     private final MessageProcessor messageProcessor;
     private final BroadcastService broadcastService;
     private final RateLimiter rateLimiter;
     private final SystemResponseSender systemResponseSender;
 
-    /**
-     * ========== CONNECTION LIFECYCLE ==========
-     */
 
+    // ========== CONNECTION LIFECYCLE ==========
     /**
      * Called when new WebSocket connection is established
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         sessionRegistry.addSession(session);
+
+        userRegistry.addSession(session.getId());
+
         systemResponseSender.sendSystem(session, MessageConstants.MSG_WELCOME);
 
         log.info("[CONNECT] Session: {}", session.getId());
@@ -63,12 +65,20 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             notifyFollowersOfDisconnect(username);
         }
 
-        // Clean up all registries
-        rateLimiter.removeSession(sessionId);
-        sessionRegistry.removeSession(sessionId);
+        // 2. Leave Room (Pending)
+        // 🟡 TODO: Uncomment this when RoomRegistry is implemented
+        // if (roomRegistry != null) {
+        //     roomRegistry.leaveCurrentRoom(sessionId);
+        // }
 
         // Handle leave and broadcast to all users
         MessageDTO leaveMessage = chatService.handleLeave(sessionId);
+
+        // Clean up all registries
+        rateLimiter.removeSession(sessionId);
+        sessionRegistry.removeSession(sessionId);
+        userRegistry.removeUser(sessionId);
+
         if (leaveMessage != null) {
             broadcastService.broadcast(leaveMessage, null);
         }
@@ -78,10 +88,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         userRegistry.logCountOnlineUsers();
     }
 
-    /**
-     * ========== MESSAGE HANDLING ==========
-     */
-
+    // ========== MESSAGE HANDLING ==========
     /**
      * Called when text message is received from WebSocket
      */
@@ -97,10 +104,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         messageProcessor.processMessage(session, message.getPayload());
     }
 
-    /**
-     * ========== HELPER METHODS ==========
-     */
-
+    // ========== HELPER METHODS ==========
     /**
      * Notify all users who were targeting the disconnected user
      * Remove their targets and send notification
