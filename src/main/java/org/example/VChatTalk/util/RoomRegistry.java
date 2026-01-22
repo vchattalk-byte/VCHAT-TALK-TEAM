@@ -10,14 +10,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages the lifecycle of chat rooms and their members.
- * <p>
- * <strong>Invariant:</strong> A session can only be in ONE room at a time.
- * <p>
- * <strong>Design Note:</strong>
- * {@code sessionRoomIndex} is the Source of Truth for "Where is this user?".
- * {@code roomSessions} is the derived view for "Who is in this room?".
- * Consistency is eventual (nanoseconds) but sufficient for chat requirements.
+ *
+ * Invariant:
+ * A session can only belong to ONE room at a time.
+ *
+ * Concurrency model:
+ * Uses ConcurrentHashMap for thread-safe access to individual data structures.
+ * However, compound operations (e.g. updating both sessionRoomIndex and roomSessions
+ * in joinRoom) are NOT atomic.
+ *
+ * As a result, short-lived inconsistencies may be observable under concurrent access.
+ * sessionRoomIndex is treated as the source of truth, and roomSessions is a derived view.
+ *
+ * If strict consistency is required, external synchronization must be applied.
  */
+
 @Slf4j
 @Component
 public class RoomRegistry {
@@ -32,7 +39,7 @@ public class RoomRegistry {
      * Add a session to a room.
      * Auto-removes session from previous room if necessary.
      */
-    public void joinRoom(String roomId, String sessionId) {
+    public synchronized void joinRoom(String roomId, String sessionId) {
         // Validation: Fail fast for programming errors, but use DEBUG to reduce noise
         if (roomId == null || !roomId.startsWith("#") || roomId.length() <= 1) {
             log.debug("Join failed: Invalid roomId format '{}'", roomId);
