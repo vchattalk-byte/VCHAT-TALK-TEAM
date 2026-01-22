@@ -17,8 +17,6 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.util.List;
-
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -56,33 +54,24 @@ class ChatWebSocketHandlerTest {
     }
 
     @Test
-    @DisplayName("On Disconnect: Should cleanup and notify followers")
+    @DisplayName("On Disconnect: Should cleanup Registries explicitly")
     void afterConnectionClosed_Success() {
         String username = "Alice";
-        String followerId = "follower-session";
-        WebSocketSession followerSession = mock(WebSocketSession.class);
 
-        // Setup user info
+        // Mock behaviors
         when(userRegistry.getUsername(SESSION_ID)).thenReturn(username);
         when(chatService.handleLeave(SESSION_ID)).thenReturn(MessageDTO.builder().content("Bye").build());
 
-        // Setup a follower (someone private chatting with Alice)
-        when(privateChatRegistry.getSessionsTargeting(username)).thenReturn(List.of(followerId));
-        when(sessionRegistry.findSessionById(followerId)).thenReturn(followerSession);
-        when(followerSession.isOpen()).thenReturn(true);
-
+        // Execute
         chatWebSocketHandler.afterConnectionClosed(session, CloseStatus.NORMAL);
 
-        // Verify Cleanup
+        // Verify CLEANUP Logic (Moved from Service to Handler)
         verify(rateLimiter).removeSession(SESSION_ID);
         verify(sessionRegistry).removeSession(SESSION_ID);
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
+        verify(userRegistry).removeUser(SESSION_ID); // QUAN TRỌNG: Verify handler gọi hàm xóa user
 
-        // Verify Follower Notification
-        verify(privateChatRegistry).removeTarget(followerId);
-        try {
-            verify(systemResponseSender).sendSystem(eq(followerSession), anyString());
-        } catch (Exception e) { /* ignored for test */ }
+        // Verify Broadcast
+        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
     }
 
     // ========== MESSAGE TESTS ==========

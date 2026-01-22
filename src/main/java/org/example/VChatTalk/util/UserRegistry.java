@@ -40,6 +40,10 @@ public class UserRegistry {
             return false;
         }
 
+        if (isUserRegistered(sessionId)) {
+            return false;
+        }
+
         // Check if username taken
         String existingSession = usernameSessions.putIfAbsent(username, sessionId);
         if (existingSession != null) {

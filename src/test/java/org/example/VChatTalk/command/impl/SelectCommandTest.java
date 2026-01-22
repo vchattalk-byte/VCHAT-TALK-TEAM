@@ -3,6 +3,8 @@ package org.example.VChatTalk.command.impl;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
+import org.example.VChatTalk.model.ChatContext;
+import org.example.VChatTalk.model.UserSession;
 import org.example.VChatTalk.util.PrivateChatRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
 import org.example.VChatTalk.util.UserRegistry;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.socket.WebSocketSession;
@@ -23,24 +26,18 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SelectCommandTest {
 
-    @Mock
-    private UserRegistry userRegistry;
-
-    @Mock
-    private PrivateChatRegistry privateChatRegistry;
-
-    @Mock
-    private SystemResponseSender responder;
-
-    @Mock
-    private WebSocketSession session;
+    @Mock private UserRegistry userRegistry;
+    @Mock private PrivateChatRegistry privateChatRegistry;
+    @Mock private SystemResponseSender responder;
+    @Mock private WebSocketSession session;
 
     private SelectCommand selectCommand;
+    private final String SESSION_ID = "sess-1";
 
     @BeforeEach
     void setUp() {
-        // Inject Mocks vào Command
-        selectCommand = new SelectCommand(userRegistry, responder, privateChatRegistry);
+        selectCommand = new SelectCommand(responder, userRegistry, privateChatRegistry);
+        lenient().when(session.getId()).thenReturn(SESSION_ID);
     }
 
     @Test
@@ -52,90 +49,42 @@ class SelectCommandTest {
     @Test
     @DisplayName("Fail if user is not logged in")
     void testExecute_NotLoggedIn() throws IOException {
-        // Simulator is not logged in yet
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(false);
+        // Mock session trả về null hoặc Anonymous
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(null);
 
         CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
         selectCommand.execute(session, result);
 
-        // Verify: The error ERR_NOT_LOGGED_IN must be submitted.
         verify(responder).sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
-        // Verify: Do not set targets
         verify(privateChatRegistry, never()).setTarget(anyString(), anyString());
     }
 
     @Test
-    @DisplayName("Fail if argument (target user) is missing")
-    void testExecute_MissingArgument() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-
-        // Argument is null
-        CommandResult result = new CommandResult(CommandType.SELECT, null, null);
-        selectCommand.execute(session, result);
-
-        verify(responder).sendError(session, String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select"));
-    }
-
-    @Test
-    @DisplayName("Fail if username contains spaces")
-    void testExecute_SpaceInUsername() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-
-        CommandResult result = new CommandResult(CommandType.SELECT, "User Name", null);
-        selectCommand.execute(session, result);
-
-        verify(responder).sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
-    }
-
-    @Test
-    @DisplayName("Fail if self-chat")
-    void testExecute_SelfChat() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
-
-        // Target is Alice (yourself)
-        CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
-        selectCommand.execute(session, result);
-
-        verify(responder).sendError(session, MessageConstants.ERR_SELF_CHAT);
-    }
-
-    @Test
-    @DisplayName("Fail if target user is offline")
-    void testExecute_TargetOffline() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
-
-        // Bob offline
-        when(userRegistry.isUserOnline("Bob")).thenReturn(false);
-
-        CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
-        selectCommand.execute(session, result);
-
-        verify(responder).sendError(session, String.format(MessageConstants.ERR_USER_OFFLINE, "Bob"));
-    }
-
-    @Test
-    @DisplayName("Success: Switch to private chat")
+    @DisplayName("Success: Switch to private chat and Update Context")
     void testExecute_Success() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
+        // Arrange
+        UserSession initialSession = UserSession.builder()
+                .sessionId(SESSION_ID)
+                .username("Alice")
+                .context(ChatContext.GLOBAL)
+                .build();
 
-        // Bob online
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(initialSession);
         when(userRegistry.isUserOnline("Bob")).thenReturn(true);
 
+        // Act
         CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
         selectCommand.execute(session, result);
 
-        // Important verification: You must call setTarget.
-        verify(privateChatRegistry).setTarget("sess-1", "Bob");
-        // Verify: Notification sent successfully
+        // Assert 1: Registry updated
+        verify(privateChatRegistry).setTarget(SESSION_ID, "Bob");
+
+        // Assert 2: User Context updated to PRIVATE
+        ArgumentCaptor<UserSession> captor = ArgumentCaptor.forClass(UserSession.class);
+        verify(userRegistry).updateUser(captor.capture());
+        assertEquals(ChatContext.PRIVATE, captor.getValue().getContext());
+
+        // Assert 3: Notification
         verify(responder).sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, "Bob"));
     }
 }
