@@ -80,6 +80,10 @@ public class PrivateChatRegistry {
         }
     }
 
+    /**
+     * Returns all sessionIds that are currently targeting the given username.
+     * No ordering is guaranteed. The returned set is unmodifiable.
+     */
     public Set<String> getSessionsTargeting(String targetUsername) {
         if (targetUsername == null) {
             return Collections.emptySet();

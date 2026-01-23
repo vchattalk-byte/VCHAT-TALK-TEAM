@@ -12,14 +12,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,12 +29,26 @@ class LeaveCommandTest {
     @Mock private PrivateChatRegistry privateChatRegistry;
 
     private LeaveCommand leaveCommand;
-    private final String SESSION_ID = "s1";
+    private static final String SESSION_ID = "s1";
 
     @BeforeEach
     void setUp() {
         leaveCommand = new LeaveCommand(userRegistry, responder, privateChatRegistry);
         lenient().when(session.getId()).thenReturn(SESSION_ID);
+    }
+
+    @Test
+    @DisplayName("Fail: User not logged in -> ERR_NOT_LOGGED_IN")
+    void testExecute_NotLoggedIn() throws IOException {
+        // Arrange: user chưa login
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(null);
+
+        // Act
+        leaveCommand.execute(session, new CommandResult(CommandType.LEAVE, null, null));
+
+        // Assert
+        verify(responder).sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
+        verifyNoInteractions(privateChatRegistry);
     }
 
     @Test
@@ -54,12 +66,12 @@ class LeaveCommandTest {
 
         verify(responder).sendError(session, MessageConstants.ERR_ALREADY_IN_GLOBAL);
         verify(privateChatRegistry, never()).removeTarget(anyString());
+        verify(userRegistry, never()).updateContext(any(), any());
     }
 
     @Test
     @DisplayName("Success: Leave private chat (Context is PRIVATE)")
-    void testExecute_Success() throws IOException {
-        // Arrange: User is in PRIVATE context
+    void testExecute_LeavePrivateChat() throws IOException {
         UserSession privateSession = UserSession.builder()
                 .sessionId(SESSION_ID)
                 .username("Alice")
@@ -68,17 +80,15 @@ class LeaveCommandTest {
 
         when(userRegistry.getSession(SESSION_ID)).thenReturn(privateSession);
 
-        // Act
         leaveCommand.execute(session, new CommandResult(CommandType.LEAVE, null, null));
 
-        // Assert 1: Registry Cleaned
+        // 1️⃣ Private registry cleaned
         verify(privateChatRegistry).removeTarget(SESSION_ID);
 
-        // Assert 2: Context Reset to GLOBAL
-        ArgumentCaptor<UserSession> captor = ArgumentCaptor.forClass(UserSession.class);
-        verify(userRegistry).updateUser(captor.capture());
-        assertEquals(ChatContext.GLOBAL, captor.getValue().getContext());
+        // 2️⃣ Context reset to GLOBAL (CHAT-3 compliant)
+        verify(userRegistry).updateContext(SESSION_ID, ChatContext.GLOBAL);
 
+        // 3️⃣ Feedback sent
         verify(responder).sendSystem(session, MessageConstants.MSG_PRIVATE_CHAT_LEAVE);
     }
 }

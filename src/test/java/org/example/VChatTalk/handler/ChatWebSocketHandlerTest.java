@@ -17,6 +17,8 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.Set;
+
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -99,5 +101,52 @@ class ChatWebSocketHandlerTest {
 
         verify(systemResponseSender).sendError(session, MessageConstants.ERR_RATE_LIMIT);
         verifyNoInteractions(messageProcessor);
+    }
+
+    @Test
+    @DisplayName("On Disconnect: Notify followers and cleanup private chat targets")
+    void afterConnectionClosed_ShouldNotifyFollowersAndCleanupTargets() throws Exception {
+        // Alice disconnects
+        String aliceSessionId = SESSION_ID;
+        String aliceUsername = "Alice";
+
+        // Two followers chatting with Alice
+        String bobSessionId = "sess-bob";
+        String charlieSessionId = "sess-charlie";
+
+        WebSocketSession bobSession = mock(WebSocketSession.class);
+        WebSocketSession charlieSession = mock(WebSocketSession.class);
+
+        when(bobSession.isOpen()).thenReturn(true);
+        when(charlieSession.isOpen()).thenReturn(true);
+
+        // Mock registries
+        when(userRegistry.getUsername(aliceSessionId)).thenReturn(aliceUsername);
+        when(privateChatRegistry.getSessionsTargeting(aliceUsername))
+                .thenReturn(Set.of(bobSessionId, charlieSessionId));
+
+        when(sessionRegistry.findSessionById(bobSessionId)).thenReturn(bobSession);
+        when(sessionRegistry.findSessionById(charlieSessionId)).thenReturn(charlieSession);
+
+        // Execute
+        chatWebSocketHandler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        // 1️⃣ Followers should be cleaned up
+        verify(privateChatRegistry).removeTarget(bobSessionId);
+        verify(privateChatRegistry).removeTarget(charlieSessionId);
+
+        // 2️⃣ Followers should be notified
+        verify(systemResponseSender).sendSystem(
+                eq(bobSession),
+                contains("Alice")
+        );
+        verify(systemResponseSender).sendSystem(
+                eq(charlieSession),
+                contains("Alice")
+        );
+
+        // 3️⃣ Alice should be removed
+        verify(userRegistry).removeUser(aliceSessionId);
+        verify(sessionRegistry).removeSession(aliceSessionId);
     }
 }

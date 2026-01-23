@@ -18,6 +18,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class SelectCommand implements IChatCommand {
+
     private final SystemResponseSender responder;
     private final UserRegistry userRegistry;
     private final PrivateChatRegistry privateChatRegistry;
@@ -32,42 +33,46 @@ public class SelectCommand implements IChatCommand {
         String sessionId = session.getId();
         UserSession userSession = userRegistry.getSession(sessionId);
 
-        // Auth Check
-        if (userSession == null || MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
+        // 1️⃣ Auth check
+        if (userSession == null ||
+                MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
             responder.sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
             return;
         }
 
-        // Arg Check
+        // 2️⃣ Arg check
         String targetUser = result.getArgument();
         if (targetUser == null || targetUser.isBlank()) {
-            responder.sendError(session, String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select"));
+            responder.sendError(session,
+                    String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select"));
             return;
         }
 
-        // Username cannot contain spaces
+        // 3️⃣ Username format
         if (targetUser.trim().contains(" ")) {
             responder.sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
             return;
         }
 
-        // Self Chat Check
+        // 4️⃣ Self chat
         String currentUser = userSession.getUsername();
         if (targetUser.equals(currentUser)) {
             responder.sendError(session, MessageConstants.ERR_SELF_CHAT);
             return;
         }
 
-        // Online Check & Switch
-        if (userRegistry.isUserOnline(targetUser)) {
-            privateChatRegistry.setTarget(session.getId(), targetUser);
-            // Update "State" (UserSession Context)
-            UserSession newSession = userSession.withContext(ChatContext.PRIVATE);
-            userRegistry.updateUser(newSession);
-
-            responder.sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, targetUser));
-        } else {
-            responder.sendError(session, String.format(MessageConstants.ERR_USER_OFFLINE, targetUser));
+        // 5️⃣ Online check & switch
+        if (!userRegistry.isUserOnline(targetUser)) {
+            responder.sendError(session,
+                    String.format(MessageConstants.ERR_USER_OFFLINE, targetUser));
+            return;
         }
+
+        // 6️⃣ State transition
+        privateChatRegistry.setTarget(sessionId, targetUser);
+        userRegistry.updateContext(sessionId, ChatContext.PRIVATE);
+
+        responder.sendSystem(session,
+                String.format(MessageConstants.MSG_PRIVATE_CHAT_START, targetUser));
     }
 }

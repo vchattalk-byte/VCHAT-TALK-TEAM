@@ -58,15 +58,7 @@ class UserRegistryTest {
         registry.tryRegisterUser("sess-1", "alice");
         boolean result = registry.tryRegisterUser("sess-1", "bob");  // Same session trying to change name
 
-        // Note: Depending on logic, this might be false (cannot re-register) or true (rename).
-        // Based on your UserRegistry logic: putIfAbsent(username) check happens first.
-        // "bob" is free, but let's check strict logic.
-        // Assuming implementation blocks re-registration if not handled explicitly.
-
-        // Correct behavior check:
-        // If tryRegisterUser allows rename, this might pass.
-        // If it strictly checks state, it might fail.
-        // Let's assume standard flow: One user per session.
+        // Session cannot re-register with a different username while still logged in
         assertFalse(result);
         assertEquals("alice", registry.getUsername("sess-1"));  // alice kept
     }

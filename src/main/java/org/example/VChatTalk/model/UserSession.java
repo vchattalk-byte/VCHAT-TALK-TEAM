@@ -3,9 +3,9 @@ package org.example.VChatTalk.model;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
+import org.example.VChatTalk.command.MessageConstants;
 
 import java.util.Objects;
-
 
 @Getter
 @Builder(toBuilder = true)
@@ -25,15 +25,19 @@ public class UserSession {
     public static UserSession create(String sessionId) {
         return UserSession.builder()
                 .sessionId(sessionId)
-                .username("Anonymous")
+                .username(MessageConstants.USER_ANONYMOUS)
                 .context(ChatContext.GLOBAL)
                 .build();
     }
 
     @Override
     public boolean equals(Object o) {
-        if(this == o) return true;
-        if(!(o instanceof UserSession)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof UserSession)) {
+            return false;
+        }
         return Objects.equals(this.sessionId, ((UserSession) o).sessionId);
     }
 

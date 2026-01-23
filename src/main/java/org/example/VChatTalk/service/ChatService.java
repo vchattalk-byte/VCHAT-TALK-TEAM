@@ -2,7 +2,6 @@
 
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
-    import org.example.VChatTalk.command.MessageConstants;
     import org.example.VChatTalk.model.ChatContext;
     import org.example.VChatTalk.model.MessageDTO;
     import org.example.VChatTalk.model.MessageType;
@@ -32,7 +31,21 @@
         private final BroadcastService broadcastService;
 
         // ========== MESSAGE ROUTING ==========
+        private void recoverFromBrokenPrivateContext(WebSocketSession session, String sessionId)
+                throws IOException {
 
+            log.warn("Broken PRIVATE context for session {}. Resetting to GLOBAL.", sessionId);
+
+            privateChatRegistry.removeTarget(sessionId);
+            userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
+
+            broadcastService.sendToSession(
+                    session,
+                    systemMessage(AnsiColor.RED +
+                            "Private chat target lost. Returned to global chat." +
+                            AnsiColor.RESET)
+            );
+        }
         /**
          * Route message to either global chat or private chat based on user's target
          */
@@ -40,26 +53,27 @@
             String sessionId = senderSession.getId();
 
             // Auth Check (Get Logical Session)
-            UserSession userSession = userRegistry.getSession(sessionId);
-            if (userSession == null || MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
+            if (!userRegistry.isUserRegistered(sessionId)) {
                 throw new IllegalStateException("Please login before chatting.");
             }
 
             // Prepare Base Message
             MessageDTO message = handleMessage(sessionId, dto);
 
-            // Route based on Context
-            ChatContext context = userSession.getContext();
+            UserSession sender = userRegistry.getSession(sessionId);
+            if (sender == null) {
+                log.debug("route failed: sender is null");
+                return;
+            }
 
-            switch (context) {
+            // Route based on Context
+            switch (sender.getContext()) {
                 case PRIVATE -> {
                     String targetUser = privateChatRegistry.getTarget(sessionId);
                     if (targetUser != null) {
                         handlePrivateMessage(senderSession, message, targetUser);
                     } else {
-                        // Fallback error if state is inconsistent
-                        broadcastService.sendToSession(senderSession,
-                                systemMessage(AnsiColor.RED + "Error: Private chat target lost." + AnsiColor.RESET));
+                        recoverFromBrokenPrivateContext(senderSession, sessionId);
                     }
                 }
                 case ROOM -> handleRoomMessage(senderSession, message);
@@ -94,6 +108,8 @@
             boolean success = userRegistry.tryRegisterUser(sessionId, name);
             if (!success) {
                 throw new IllegalArgumentException("Username '" + name + "' is already taken. Please choose another.");
+            } else {
+                userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
             }
 
             int count = userRegistry.countOnlineUsers();

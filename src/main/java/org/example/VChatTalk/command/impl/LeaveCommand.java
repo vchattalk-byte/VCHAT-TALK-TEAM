@@ -18,6 +18,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class LeaveCommand implements IChatCommand {
+
     private final UserRegistry userRegistry;
     private final SystemResponseSender responder;
     private final PrivateChatRegistry privateChatRegistry;
@@ -27,39 +28,31 @@ public class LeaveCommand implements IChatCommand {
         return CommandType.LEAVE;
     }
 
-    /**
-     * Helper method to reset user state to GLOBAL
-     */
-    private void updateToGlobal(UserSession currentSession) {
-        UserSession globalSession = currentSession.withContext(ChatContext.GLOBAL);
-        userRegistry.updateUser(globalSession);
-    }
-
     @Override
     public void execute(WebSocketSession session, CommandResult result) throws IOException {
         String sessionId = session.getId();
         UserSession userSession = userRegistry.getSession(sessionId);
 
-        // Auth Check
-        if (userSession == null || MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
+        // 1️⃣ Auth check
+        if (userSession == null ||
+                MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
             responder.sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
             return;
         }
 
-        ChatContext currentContext = userSession.getContext();
-
-        // Handle PRIVATE Context
-        if (currentContext == ChatContext.PRIVATE) {
+        // 2️⃣ Context handling
+        if (userSession.getContext() == ChatContext.PRIVATE) {
+            // Clean private chat state
             privateChatRegistry.removeTarget(sessionId);
 
-            // Switch state back to GLOBAL
-            updateToGlobal(userSession);
+            // Switch back to GLOBAL
+            userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
 
             responder.sendSystem(session, MessageConstants.MSG_PRIVATE_CHAT_LEAVE);
             return;
         }
 
-        // Already GLOBAL
+        // 3️⃣ Already GLOBAL
         responder.sendError(session, MessageConstants.ERR_ALREADY_IN_GLOBAL);
     }
 }

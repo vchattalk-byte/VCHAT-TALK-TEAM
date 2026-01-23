@@ -1,6 +1,7 @@
 package org.example.VChatTalk.util;
 
 import org.example.VChatTalk.command.MessageConstants;
+import org.example.VChatTalk.model.ChatContext;
 import org.example.VChatTalk.model.UserSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,7 @@ public class UserRegistry {
     private static final Logger logger = LoggerFactory.getLogger(UserRegistry.class);
 
     // Primary Store: SessionID -> UserSession (State)
-    private final ConcurrentHashMap<String, UserSession> sessionUsernames = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, UserSession> sessionStates = new ConcurrentHashMap<>();
 
     // Secondary Index: Username -> SessionID (Lookup)
     private final ConcurrentHashMap<String, String> usernameSessions = new ConcurrentHashMap<>();
@@ -29,7 +30,8 @@ public class UserRegistry {
             logger.debug("UserRegistry addSession failed: sessionId is null.");
             return;
         }
-        sessionUsernames.put(sessionId, UserSession.create(sessionId));
+        removeUser(sessionId);
+        sessionStates.put(sessionId, UserSession.create(sessionId));
     }
 
     /**
@@ -50,7 +52,7 @@ public class UserRegistry {
             return false;
         }
         // Update UserSession State
-        UserSession updated = sessionUsernames.computeIfPresent(sessionId, (id, userSession) ->
+        UserSession updated = sessionStates.computeIfPresent(sessionId, (id, userSession) ->
                 userSession.withUsername(username)
         );
 
@@ -63,13 +65,12 @@ public class UserRegistry {
         return true;
     }
 
-    /**
-     * Update the entire session state (e.g. changing Context).
-     */
-    public void updateUser(UserSession session) {
-        if (session != null) {
-            sessionUsernames.put(session.getSessionId(), session);
-        }
+    public void updateContext(String sessionId, ChatContext newContext) {
+        if (sessionId == null || newContext == null) return;
+
+        sessionStates.computeIfPresent(sessionId,
+                (id, userSession) -> userSession.withContext(newContext)
+        );
     }
 
     /**
@@ -81,7 +82,7 @@ public class UserRegistry {
             return;
         }
 
-        UserSession removed = sessionUsernames.remove(sessionId);
+        UserSession removed = sessionStates.remove(sessionId);
 
         if (removed != null && !MessageConstants.USER_ANONYMOUS.equals(removed.getUsername())) {
             usernameSessions.remove(removed.getUsername());
@@ -92,16 +93,16 @@ public class UserRegistry {
     // ========== LOOKUP METHODS ==========
 
     public UserSession getSession(String sessionId) {
-        return sessionUsernames.get(sessionId);
+        return sessionStates.get(sessionId);
     }
 
     public String getUsername(String sessionId) {
-        UserSession session = sessionUsernames.get(sessionId);
+        UserSession session = sessionStates.get(sessionId);
         return (session != null) ? session.getUsername() : MessageConstants.USER_ANONYMOUS;
     }
 
     public boolean isUserRegistered(String sessionId) {
-        UserSession session = sessionUsernames.get(sessionId);
+        UserSession session = sessionStates.get(sessionId);
         return session != null && !MessageConstants.USER_ANONYMOUS.equals(session.getUsername());
     }
 
@@ -127,7 +128,7 @@ public class UserRegistry {
     }
 
     public void logCountOnlineUsers() {
-        int count = Math.max(0, countOnlineUsers() - 1);
+        int count = countOnlineUsers();
         logger.info("All online connections: {}", count);
     }
 }

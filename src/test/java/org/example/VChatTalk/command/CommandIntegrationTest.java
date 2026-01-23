@@ -171,4 +171,28 @@ class CommandIntegrationTest {
         CommandResult result = commandParser.parse(commandText);
         commandExecutor.execute(session, result);
     }
+
+    @Test
+    @DisplayName("Fail fast: Duplicate CommandType registration should throw exception")
+    void testDuplicateCommandTypeRegistration() {
+        // Arrange
+        IChatCommand login1 = new LoginCommand(userRegistry, responder);
+        IChatCommand login2 = new LoginCommand(userRegistry, responder); // SAME TYPE
+
+        List<IChatCommand> duplicatedCommands = List.of(
+                login1,
+                login2
+        );
+
+        // Act + Assert
+        IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> new CommandExecutor(duplicatedCommands)
+        );
+
+        assertTrue(
+                ex.getMessage().toLowerCase().contains("duplicate"),
+                "Exception message should mention duplicate command type"
+        );
+    }
 }
