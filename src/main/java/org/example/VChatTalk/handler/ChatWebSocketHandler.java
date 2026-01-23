@@ -26,7 +26,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final SessionRegistry sessionRegistry;
     private final UserRegistry userRegistry;
     private final PrivateChatRegistry privateChatRegistry;
-    // private final RoomRegistry roomRegistry; // 🟡 TODO: Uncomment when RoomRegistry is ready
+    private final RoomRegistry roomRegistry;
     private final ChatService chatService;
     private final MessageProcessor messageProcessor;
     private final BroadcastService broadcastService;
@@ -65,11 +65,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             notifyFollowersOfDisconnect(username);
         }
 
-        // 2. Leave Room (Pending)
-        // 🟡 TODO: Uncomment this when RoomRegistry is implemented
-        // if (roomRegistry != null) {
-        //     roomRegistry.leaveCurrentRoom(sessionId);
-        // }
+         if (roomRegistry != null) {
+             roomRegistry.leaveCurrentRoom(sessionId);
+         }
 
         // Handle leave and broadcast to all users
         MessageDTO leaveMessage = chatService.handleLeave(sessionId);
