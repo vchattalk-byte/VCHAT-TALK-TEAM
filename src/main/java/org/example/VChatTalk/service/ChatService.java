@@ -111,7 +111,7 @@
 
             String username = userRegistry.getUsername(sessionId);
 
-            int count = userRegistry.countOnlineUsers();
+            int count = Math.max(0, userRegistry.countOnlineUsers() - 1);
             return systemMessage(username + " has left the chat. (Total: " + count + ")");
         }
 
