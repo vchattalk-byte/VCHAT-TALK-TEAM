@@ -15,14 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * A session can only belong to ONE room at a time.
  *
  * Concurrency model:
- * Uses ConcurrentHashMap for thread-safe access to individual data structures.
- * However, compound operations (e.g. updating both sessionRoomIndex and roomSessions
- * in joinRoom) are NOT atomic.
+ * All public methods are synchronized to ensure STRONG CONSISTENCY.
+ * Compound operations across internal data structures are atomic.
  *
- * As a result, short-lived inconsistencies may be observable under concurrent access.
- * sessionRoomIndex is treated as the source of truth, and roomSessions is a derived view.
- *
- * If strict consistency is required, external synchronization must be applied.
+ * No observable inconsistencies are allowed under concurrent access.
  */
 
 @Slf4j
@@ -69,7 +65,7 @@ public class RoomRegistry {
     /**
      * Remove a session from a specific room.
      */
-    public void leaveRoom(String roomId, String sessionId) {
+    public synchronized void leaveRoom(String roomId, String sessionId) {
         if (roomId == null || sessionId == null) {
             log.debug("Leave failed: null params");
             return;
@@ -89,7 +85,7 @@ public class RoomRegistry {
      * Convenience method to leave whatever room the user is currently in.
      * Simplifies the LeaveCommand logic.
      */
-    public void leaveCurrentRoom(String sessionId) {
+    public synchronized void leaveCurrentRoom(String sessionId) {
         if (sessionId == null) return;
 
         String currentRoom = sessionRoomIndex.get(sessionId);
@@ -115,7 +111,7 @@ public class RoomRegistry {
     /**
      * Get all members of a specific room.
      */
-    public Set<String> getRoomMembers(String roomId) {
+    public synchronized Set<String> getRoomMembers(String roomId) {
         if (roomId == null) return Collections.emptySet();
 
         Set<String> members = roomSessions.get(roomId);
@@ -127,7 +123,7 @@ public class RoomRegistry {
     /**
      * Find which room a specific session is currently in.
      */
-    public Optional<String> getRoomOfSession(String sessionId) {
+    public synchronized Optional<String> getRoomOfSession(String sessionId) {
         if (sessionId == null) return Optional.empty();
         return Optional.ofNullable(sessionRoomIndex.get(sessionId));
     }
