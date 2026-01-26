@@ -17,7 +17,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.util.List;
+import java.util.Set;
 
 import static org.mockito.Mockito.*;
 
@@ -56,33 +56,24 @@ class ChatWebSocketHandlerTest {
     }
 
     @Test
-    @DisplayName("On Disconnect: Should cleanup and notify followers")
+    @DisplayName("On Disconnect: Should cleanup Registries explicitly")
     void afterConnectionClosed_Success() {
         String username = "Alice";
-        String followerId = "follower-session";
-        WebSocketSession followerSession = mock(WebSocketSession.class);
 
-        // Setup user info
+        // Mock behaviors
         when(userRegistry.getUsername(SESSION_ID)).thenReturn(username);
         when(chatService.handleLeave(SESSION_ID)).thenReturn(MessageDTO.builder().content("Bye").build());
 
-        // Setup a follower (someone private chatting with Alice)
-        when(privateChatRegistry.getSessionsTargeting(username)).thenReturn(List.of(followerId));
-        when(sessionRegistry.findSessionById(followerId)).thenReturn(followerSession);
-        when(followerSession.isOpen()).thenReturn(true);
-
+        // Execute
         chatWebSocketHandler.afterConnectionClosed(session, CloseStatus.NORMAL);
 
-        // Verify Cleanup
+        // Verify CLEANUP Logic (Moved from Service to Handler)
         verify(rateLimiter).removeSession(SESSION_ID);
         verify(sessionRegistry).removeSession(SESSION_ID);
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
+        verify(userRegistry).removeUser(SESSION_ID); // QUAN TRỌNG: Verify handler gọi hàm xóa user
 
-        // Verify Follower Notification
-        verify(privateChatRegistry).removeTarget(followerId);
-        try {
-            verify(systemResponseSender).sendSystem(eq(followerSession), anyString());
-        } catch (Exception e) { /* ignored for test */ }
+        // Verify Broadcast
+        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
     }
 
     // ========== MESSAGE TESTS ==========
@@ -110,5 +101,52 @@ class ChatWebSocketHandlerTest {
 
         verify(systemResponseSender).sendError(session, MessageConstants.ERR_RATE_LIMIT);
         verifyNoInteractions(messageProcessor);
+    }
+
+    @Test
+    @DisplayName("On Disconnect: Notify followers and cleanup private chat targets")
+    void afterConnectionClosed_ShouldNotifyFollowersAndCleanupTargets() throws Exception {
+        // Alice disconnects
+        String aliceSessionId = SESSION_ID;
+        String aliceUsername = "Alice";
+
+        // Two followers chatting with Alice
+        String bobSessionId = "sess-bob";
+        String charlieSessionId = "sess-charlie";
+
+        WebSocketSession bobSession = mock(WebSocketSession.class);
+        WebSocketSession charlieSession = mock(WebSocketSession.class);
+
+        when(bobSession.isOpen()).thenReturn(true);
+        when(charlieSession.isOpen()).thenReturn(true);
+
+        // Mock registries
+        when(userRegistry.getUsername(aliceSessionId)).thenReturn(aliceUsername);
+        when(privateChatRegistry.getSessionsTargeting(aliceUsername))
+                .thenReturn(Set.of(bobSessionId, charlieSessionId));
+
+        when(sessionRegistry.findSessionById(bobSessionId)).thenReturn(bobSession);
+        when(sessionRegistry.findSessionById(charlieSessionId)).thenReturn(charlieSession);
+
+        // Execute
+        chatWebSocketHandler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        // 1️⃣ Followers should be cleaned up
+        verify(privateChatRegistry).removeTarget(bobSessionId);
+        verify(privateChatRegistry).removeTarget(charlieSessionId);
+
+        // 2️⃣ Followers should be notified
+        verify(systemResponseSender).sendSystem(
+                eq(bobSession),
+                contains("Alice")
+        );
+        verify(systemResponseSender).sendSystem(
+                eq(charlieSession),
+                contains("Alice")
+        );
+
+        // 3️⃣ Alice should be removed
+        verify(userRegistry).removeUser(aliceSessionId);
+        verify(sessionRegistry).removeSession(aliceSessionId);
     }
 }

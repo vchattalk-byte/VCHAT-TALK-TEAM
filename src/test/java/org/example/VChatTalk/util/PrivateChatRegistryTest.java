@@ -7,6 +7,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -47,7 +50,7 @@ class PrivateChatRegistryTest {
         assertNull(registry.getTarget(null));
     }
 
-    // ========== REVERSE LOOKUP ==========
+    // ========== REVERSE LOOKUP (O(1) Feature) ==========
 
     @Test
     @DisplayName("getSessionsTargeting: Multiple sessions → 1 user")
@@ -56,73 +59,125 @@ class PrivateChatRegistryTest {
         registry.setTarget("s2", "alice");
         registry.setTarget("s3", "bob");
 
-        List<String> aliceFollowers = registry.getSessionsTargeting("alice");
+        List<String> aliceFollowers = List.copyOf(registry.getSessionsTargeting("alice"));
         assertEquals(2, aliceFollowers.size());
         assertTrue(aliceFollowers.contains("s1"));
         assertTrue(aliceFollowers.contains("s2"));
     }
 
     @Test
-    @DisplayName("getSessionsTargeting: No followers → empty list")
-    void testGetSessionsTargeting_Empty() {
-        List<String> result = registry.getSessionsTargeting("nobody");
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
+    @DisplayName("Memory Leak Check: Should cleanup Reverse Index when empty")
+    void testReverseIndexCleanup() {
+        // 1. Register s1 targeting alice
+        registry.setTarget("s1", "alice");
+        assertFalse(registry.getSessionsTargeting("alice").isEmpty());
+
+        // 2. Remove s1
+        registry.removeTarget("s1");
+
+        // 3. Verify alice is completely gone from the reverse index
+        assertTrue(registry.getSessionsTargeting("alice").isEmpty(),
+                "Reverse index should be empty/cleaned up");
     }
 
     @Test
-    @DisplayName("getSessionsTargeting: Unmodifiable list")
+    @DisplayName("getSessionsTargeting: Unmodifiable set")
     void testGetSessionsTargeting_Unmodifiable() {
         registry.setTarget("s1", "alice");
-        List<String> result = registry.getSessionsTargeting("alice");
+        var result = registry.getSessionsTargeting("alice");
 
         assertThrows(UnsupportedOperationException.class, () -> result.add("s2"));
-    }
-
-    // ========== CONCURRENCY ==========
-
-    @Test
-    @DisplayName("Concurrent setTarget: No race conditions")
-    void testConcurrentSetTarget() throws InterruptedException {
-        Runnable setAlice = () -> registry.setTarget("sess-race", "alice");
-
-        Thread t1 = new Thread(setAlice);
-        Thread t2 = new Thread(setAlice);
-        t1.start(); t2.start();
-        t1.join(); t2.join();
-
-        assertEquals("alice", registry.getTarget("sess-race"));
     }
 
     // ========== EDGE CASES ==========
 
     @Test
-    @DisplayName("Remove non-existent target")
-    void testRemoveNonExistent() {
-        assertDoesNotThrow(() -> registry.removeTarget("non-existent"));
-        assertNull(registry.getTarget("non-existent"));
-    }
-
-    @Test
-    @DisplayName("Multiple targets for same session → last wins")
-    void testMultipleSetTarget() {
+    @DisplayName("Switch Target: Should clean old mapping and add new")
+    void testSwitchTarget() {
+        // s1: alice -> bob
         registry.setTarget("s1", "alice");
-        registry.setTarget("s1", "bob");
-        assertEquals("bob", registry.getTarget("s1"));
+        assertTrue(registry.getSessionsTargeting("alice").contains("s1"));
 
-        List<String> aliceFollowers = registry.getSessionsTargeting("alice");
-        assertTrue(aliceFollowers.isEmpty());
+        registry.setTarget("s1", "bob");
+
+        // Verify s1 removed from alice
+        assertFalse(registry.getSessionsTargeting("alice").contains("s1"));
+        // Verify s1 added to bob
+        assertTrue(registry.getSessionsTargeting("bob").contains("s1"));
+        assertEquals("bob", registry.getTarget("s1"));
     }
 
     @Test
-    @DisplayName("Clear all targets for user")
-    void testRemoveAllFollowers() {
+    @DisplayName("Concurrency: setTarget & removeTarget concurrently should be thread-safe")
+    void testConcurrentAccess() throws InterruptedException {
+        int threadCount = 20;
+        int iterations = 1_000;
+        String target = "alice";
+
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            final String sessionId = "s" + i;
+            executor.submit(() -> {
+                try {
+                    for (int j = 0; j < iterations; j++) {
+                        registry.setTarget(sessionId, target);
+                        registry.removeTarget(sessionId);
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executor.shutdown();
+
+        // Sau tất cả: reverse index phải sạch
+        assertTrue(
+                registry.getSessionsTargeting(target).isEmpty(),
+                "Reverse index should be empty after concurrent modifications"
+        );
+    }
+
+    @Test
+    @DisplayName("Remove non-existent target should be safe")
+    void testRemoveNonExistentTarget() {
+        assertDoesNotThrow(() -> registry.removeTarget("unknown-session"));
+    }
+
+    @Test
+    @DisplayName("Reverse index cleanup when last follower is removed")
+    void testReverseIndexCleanup_MultipleFollowers() {
         registry.setTarget("s1", "alice");
         registry.setTarget("s2", "alice");
 
+        assertEquals(2, registry.getSessionsTargeting("alice").size());
+
         registry.removeTarget("s1");
-        List<String> followers = registry.getSessionsTargeting("alice");
-        assertEquals(1, followers.size());  // s2 still targeting
-        assertTrue(followers.contains("s2"));
+        assertEquals(1, registry.getSessionsTargeting("alice").size());
+
+        registry.removeTarget("s2");
+
+        // Sau khi follower cuối cùng rời đi
+        assertTrue(
+                registry.getSessionsTargeting("alice").isEmpty(),
+                "Reverse index must be removed when last follower leaves"
+        );
+    }
+
+    @Test
+    @DisplayName("Multiple target switches should keep reverse index consistent")
+    void testMultipleTargetSwitches() {
+        registry.setTarget("s1", "alice");
+        registry.setTarget("s1", "bob");
+        registry.setTarget("s1", "charlie");
+
+        assertFalse(registry.getSessionsTargeting("alice").contains("s1"));
+        assertFalse(registry.getSessionsTargeting("bob").contains("s1"));
+        assertTrue(registry.getSessionsTargeting("charlie").contains("s1"));
+
+        assertEquals("charlie", registry.getTarget("s1"));
     }
 }

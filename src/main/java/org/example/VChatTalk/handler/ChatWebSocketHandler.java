@@ -14,6 +14,8 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.Set;
+
 /**
  * WebSocket handler for chat functionality
  * Manages connection lifecycle and delegates message processing
@@ -26,22 +28,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final SessionRegistry sessionRegistry;
     private final UserRegistry userRegistry;
     private final PrivateChatRegistry privateChatRegistry;
+    private final RoomRegistry roomRegistry;
     private final ChatService chatService;
     private final MessageProcessor messageProcessor;
     private final BroadcastService broadcastService;
     private final RateLimiter rateLimiter;
     private final SystemResponseSender systemResponseSender;
 
-    /**
-     * ========== CONNECTION LIFECYCLE ==========
-     */
 
+    // ========== CONNECTION LIFECYCLE ==========
     /**
      * Called when new WebSocket connection is established
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         sessionRegistry.addSession(session);
+
+        userRegistry.addSession(session.getId());
+
         systemResponseSender.sendSystem(session, MessageConstants.MSG_WELCOME);
 
         log.info("[CONNECT] Session: {}", session.getId());
@@ -60,15 +64,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         // Notify followers if user was registered (not Anonymous)
         if (!MessageConstants.USER_ANONYMOUS.equals(username)) {
-            notifyFollowersOfDisconnect(username);
+            notifyFollowersOfDisconnect(session, username);
         }
+
+//        roomRegistry.leaveCurrentRoom(sessionId);
+
+        // Handle leave and broadcast to all users
+        MessageDTO leaveMessage = chatService.handleLeave(sessionId);
 
         // Clean up all registries
         rateLimiter.removeSession(sessionId);
         sessionRegistry.removeSession(sessionId);
+        userRegistry.removeUser(sessionId);
 
-        // Handle leave and broadcast to all users
-        MessageDTO leaveMessage = chatService.handleLeave(sessionId);
         if (leaveMessage != null) {
             broadcastService.broadcast(leaveMessage, null);
         }
@@ -78,10 +86,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         userRegistry.logCountOnlineUsers();
     }
 
-    /**
-     * ========== MESSAGE HANDLING ==========
-     */
-
+    // ========== MESSAGE HANDLING ==========
     /**
      * Called when text message is received from WebSocket
      */
@@ -97,31 +102,51 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         messageProcessor.processMessage(session, message.getPayload());
     }
 
-    /**
-     * ========== HELPER METHODS ==========
-     */
-
+    // ========== HELPER METHODS ==========
     /**
      * Notify all users who were targeting the disconnected user
      * Remove their targets and send notification
      */
-    private void notifyFollowersOfDisconnect(String username) {
-        privateChatRegistry.getSessionsTargeting(username).forEach(followerSessionId -> {
+    private void notifyFollowersOfDisconnect(WebSocketSession disconnectedSession, String username) {
+        if (username == null) {
+            return;
+        }
+
+        Set<String> followerSessionIds =
+                privateChatRegistry.getSessionsTargeting(username);
+
+        if (followerSessionIds.isEmpty()) {
+            log.debug("notifyFollowersOfDisconnect failed: followerSessionIds is empty");
+            return;
+        }
+
+        for (String followerSessionId : followerSessionIds) {
+            privateChatRegistry.removeTarget(followerSessionId);
+
             WebSocketSession followerSession = sessionRegistry.findSessionById(followerSessionId);
 
-            if (followerSession != null && followerSession.isOpen()) {
-                try {
-                    // Remove target and return to global mode
-                    privateChatRegistry.removeTarget(followerSessionId);
-
-                    systemResponseSender.sendSystem(
-                            followerSession,
-                            String.format(MessageConstants.MSG_DISCONNECT_NOTIFY, username)
-                    );
-                } catch (Exception e) {
-                    log.error("Error notifying follower {}: {}", followerSessionId, e.getMessage());
-                }
+            if (followerSession == null || !followerSession.isOpen()) {
+                continue;
             }
-        });
+
+            try {
+                systemResponseSender.sendSystem(
+                        followerSession,
+                        String.format(
+                                MessageConstants.MSG_DISCONNECT_NOTIFY,
+                                username
+                        )
+                );
+            } catch (Exception ex) {
+                log.warn(
+                        "[DISCONNECT_NOTIFY_FAILED] followerSession={}, username={}",
+                        followerSessionId,
+                        username,
+                        ex
+                );
+            } finally {
+                privateChatRegistry.removeTarget(disconnectedSession.getId());
+            }
+        }
     }
 }

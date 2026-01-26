@@ -2,8 +2,10 @@
 
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
+    import org.example.VChatTalk.model.ChatContext;
     import org.example.VChatTalk.model.MessageDTO;
     import org.example.VChatTalk.model.MessageType;
+    import org.example.VChatTalk.model.UserSession;
     import org.example.VChatTalk.util.AnsiColor;
     import org.example.VChatTalk.util.PrivateChatRegistry;
     import org.example.VChatTalk.util.SessionRegistry;
@@ -29,22 +31,53 @@
         private final BroadcastService broadcastService;
 
         // ========== MESSAGE ROUTING ==========
+        private void recoverFromBrokenPrivateContext(WebSocketSession session, String sessionId)
+                throws IOException {
 
+            log.warn("Broken PRIVATE context for session {}. Resetting to GLOBAL.", sessionId);
+
+            privateChatRegistry.removeTarget(sessionId);
+            userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
+
+            broadcastService.sendToSession(
+                    session,
+                    systemMessage(AnsiColor.RED +
+                            "Private chat target lost. Returned to global chat." +
+                            AnsiColor.RESET)
+            );
+        }
         /**
          * Route message to either global chat or private chat based on user's target
          */
         public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
             String sessionId = senderSession.getId();
-            MessageDTO baseMessage = handleMessage(sessionId, dto);
 
-            String targetUsername = privateChatRegistry.getTarget(sessionId);
+            // Auth Check (Get Logical Session)
+            if (!userRegistry.isUserRegistered(sessionId)) {
+                throw new IllegalStateException("Please login before chatting.");
+            }
 
-            if (targetUsername != null) {
-                // PRIVATE CHAT MODE
-                handlePrivateMessage(senderSession, baseMessage, targetUsername);
-            } else {
-                // GLOBAL CHAT MODE - broadcast to all
-                broadcastService.broadcast(baseMessage, senderSession);
+            // Prepare Base Message
+            MessageDTO message = handleMessage(sessionId, dto);
+
+            UserSession sender = userRegistry.getSession(sessionId);
+            if (sender == null) {
+                log.debug("route failed: sender is null");
+                return;
+            }
+
+            // Route based on Context
+            switch (sender.getContext()) {
+                case PRIVATE -> {
+                    String targetUser = privateChatRegistry.getTarget(sessionId);
+                    if (targetUser != null) {
+                        handlePrivateMessage(senderSession, message, targetUser);
+                    } else {
+                        recoverFromBrokenPrivateContext(senderSession, sessionId);
+                    }
+                }
+                case ROOM -> handleRoomMessage(senderSession, message);
+                case GLOBAL -> broadcastService.broadcast(message, senderSession);
             }
         }
 
@@ -75,6 +108,8 @@
             boolean success = userRegistry.tryRegisterUser(sessionId, name);
             if (!success) {
                 throw new IllegalArgumentException("Username '" + name + "' is already taken. Please choose another.");
+            } else {
+                userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
             }
 
             int count = userRegistry.countOnlineUsers();
@@ -91,10 +126,8 @@
             }
 
             String username = userRegistry.getUsername(sessionId);
-            userRegistry.removeUser(sessionId);
-            privateChatRegistry.removeTarget(sessionId);
 
-            int count = userRegistry.countOnlineUsers();
+            int count = Math.max(0, userRegistry.countOnlineUsers() - 1);
             return systemMessage(username + " has left the chat. (Total: " + count + ")");
         }
 
@@ -161,6 +194,13 @@
             broadcastService.sendToSession(sender, selfEcho);
 
             log.info("[PRIVATE_MSG] {} → {}: {}", message.getSender(), targetUsername, message.getContent());
+        }
+
+        /**
+         * Handles broadcasting a message to a specific room.
+         */
+        private void handleRoomMessage(WebSocketSession senderSession, MessageDTO message) throws IOException {
+            // 🟡 TODO: Update and Uncomment when RoomRegistry is ready
         }
 
         /**
