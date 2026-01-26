@@ -18,16 +18,15 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
-public class LeaveCommand implements IChatCommand {
-
+public class JoinCommand implements IChatCommand {
     private final UserRegistry userRegistry;
-    private final SystemResponseSender responder;
-    private final PrivateChatRegistry privateChatRegistry;
     private final RoomRegistry roomRegistry;
+    private final PrivateChatRegistry privateChatRegistry;
+    private final SystemResponseSender responder;
 
     @Override
     public CommandType getType() {
-        return CommandType.LEAVE;
+        return CommandType.JOIN;
     }
 
     @Override
@@ -35,32 +34,41 @@ public class LeaveCommand implements IChatCommand {
         String sessionId = session.getId();
         UserSession userSession = userRegistry.getSession(sessionId);
 
-        // 1️⃣ Auth check
+        // Auth check
         if (userSession == null ||
                 MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
             responder.sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
             return;
         }
 
-        // 2️⃣ Context handling
+        // Validate input: /join #room
+        String roomId = result.getArgument().trim();
+        if (roomId.isEmpty()) {
+            responder.sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
+            return;
+        }
+
+        if (!roomId.startsWith("#") || roomId.length() <= 1) {
+            responder.sendError(session, MessageConstants.ERR_INVALID_ROOM_FORMAT);
+            return;
+        }
+
         switch (userSession.getContext()) {
+            case PRIVATE -> privateChatRegistry.removeTarget(sessionId);
 
-            case ROOM -> {
-                roomRegistry.getRoomOfSession(sessionId).ifPresent(roomId -> roomRegistry.leaveRoom(roomId, sessionId));
-                userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
-                responder.sendSystem(session, MessageConstants.MSG_ROOM_LEAVE);
-            }
-
-            case PRIVATE -> {
-                privateChatRegistry.removeTarget(sessionId);
-
-                userRegistry.updateContext(sessionId, ChatContext.GLOBAL);
-                responder.sendSystem(session, MessageConstants.MSG_PRIVATE_CHAT_LEAVE);
-            }
+            case ROOM -> roomRegistry.leaveCurrentRoom(sessionId);
 
             case GLOBAL -> {
-                responder.sendError(session, MessageConstants.ERR_ALREADY_IN_GLOBAL);
+                // no-op
             }
         }
+
+        roomRegistry.joinRoom(roomId, sessionId);
+
+        userRegistry.updateContext(sessionId, ChatContext.ROOM);
+
+        responder.sendSystem(session,
+                String.format(MessageConstants.MSG_ROOM_JOIN, roomId));
+
     }
 }
