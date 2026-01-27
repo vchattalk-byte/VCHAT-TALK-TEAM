@@ -43,6 +43,10 @@ public class MessageConstants {
 
     public static final String ERR_INVALID_JSON = AnsiColor.RED + "Invalid message format." + AnsiColor.RESET;
 
+    public static final String ERR_ROOM_REQUIRED = AnsiColor.RED + "Room name is required. Usage: /join #room" + AnsiColor.RESET;
+
+    public static final String ERR_INVALID_ROOM_FORMAT = AnsiColor.RED + "Invalid room format. Room must start with '#' and contain a name. Example: /join #abc" + AnsiColor.RESET;
+
     // --- SYSTEM MESSAGES ---
     public static final String MSG_LOGIN_SUCCESS =
             AnsiColor.CYAN + "Welcome %s! You have joined the chat server." + AnsiColor.RESET;
@@ -70,5 +74,13 @@ public class MessageConstants {
 
     public static final String MSG_PRIVATE_CHAT_LEAVE =
             AnsiColor.GREEN + "You left private chat. Now in global chat." + BELL + AnsiColor.RESET;
+
+    // --- ROOM CHAT MESSAGES ---
+    public static final String MSG_ROOM_JOIN =
+            AnsiColor.GREEN + "Joined room: %s" + BELL + AnsiColor.RESET;
+
+    public static final String MSG_ROOM_LEAVE =
+            AnsiColor.GREEN + "You left the room. Now in global chat." + BELL + AnsiColor.RESET;
+
     private MessageConstants() {}
 }

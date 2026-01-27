@@ -2,10 +2,7 @@ package org.example.VChatTalk.command;
 
 import org.example.VChatTalk.command.impl.*;
 import org.example.VChatTalk.command.service.CommandParserService;
-import org.example.VChatTalk.util.PrivateChatRegistry;
-import org.example.VChatTalk.util.SessionRegistry;
-import org.example.VChatTalk.util.SystemResponseSender;
-import org.example.VChatTalk.util.UserRegistry;
+import org.example.VChatTalk.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +28,7 @@ class CommandIntegrationTest {
     private CommandParserService commandParser;
     private CommandExecutor commandExecutor;
     private SessionRegistry sessionRegistry;
+    private RoomRegistry roomRegistry;
 
     // --- Mocks (External Boundaries only) ---
     @Mock
@@ -43,6 +41,7 @@ class CommandIntegrationTest {
         commandParser = new CommandParserService();
         userRegistry = new UserRegistry();
         privateChatRegistry = new PrivateChatRegistry();
+        roomRegistry = new RoomRegistry();
 
         // 2. Wire up the Commands with the Real Registry
         List<IChatCommand> commands = Arrays.asList(
@@ -51,7 +50,7 @@ class CommandIntegrationTest {
                 new SelectCommand(responder, userRegistry, privateChatRegistry),
                 new ListCommand(userRegistry, responder),
                 new HelpCommand(responder),
-                new LeaveCommand(userRegistry, responder, privateChatRegistry),
+                new LeaveCommand(userRegistry, responder, privateChatRegistry, roomRegistry),
                 new ExitCommand(userRegistry, responder),
                 new UnknownCommand(responder)
         );
