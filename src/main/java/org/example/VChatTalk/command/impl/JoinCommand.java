@@ -42,8 +42,13 @@ public class JoinCommand implements IChatCommand {
         }
 
         // Validate input: /join #room
-        String roomId = result.getArgument();
-        if (roomId == null || roomId.isBlank()) {
+        String argument = result.getArgument();
+        if (argument == null || argument.isBlank()) {
+            responder.sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
+            return;
+        }
+        String roomId = argument.trim();
+        if (roomId.isEmpty()) {
             responder.sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
             return;
         }
