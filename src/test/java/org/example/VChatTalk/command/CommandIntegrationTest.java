@@ -50,7 +50,7 @@ class CommandIntegrationTest {
                 new SelectCommand(responder, userRegistry, privateChatRegistry),
                 new ListCommand(userRegistry, responder),
                 new HelpCommand(responder),
-                new LeaveCommand(userRegistry, responder, privateChatRegistry,roomRegistry),
+                new LeaveCommand(userRegistry, responder, privateChatRegistry, roomRegistry),
                 new ExitCommand(userRegistry, responder),
                 new UnknownCommand(responder)
         );

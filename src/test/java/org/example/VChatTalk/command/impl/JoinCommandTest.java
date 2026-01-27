@@ -75,7 +75,7 @@ class JoinCommandTest {
 
         when(userRegistry.getSession(SESSION_ID)).thenReturn(userSession);
 
-        joinCommand.execute(session, joinCmd("   "));
+        joinCommand.execute(session, joinCmd(null));
 
         verify(responder).sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
         verifyNoInteractions(roomRegistry, privateChatRegistry);
@@ -167,5 +167,21 @@ class JoinCommandTest {
         );
 
         verifyNoInteractions(privateChatRegistry);
+    }
+    @Test
+    @DisplayName("Fail: Room argument is blank -> ERR_ROOM_REQUIRED")
+    void testExecute_RoomArgumentBlank() throws IOException {
+        UserSession userSession = UserSession.builder()
+                .sessionId(SESSION_ID)
+                .username("Alice")
+                .context(ChatContext.GLOBAL)
+                .build();
+
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(userSession);
+
+        joinCommand.execute(session, joinCmd("   "));
+
+        verify(responder).sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
+        verifyNoInteractions(roomRegistry, privateChatRegistry);
     }
 }
