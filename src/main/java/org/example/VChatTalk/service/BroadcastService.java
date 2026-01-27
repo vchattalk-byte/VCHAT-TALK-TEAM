@@ -67,4 +67,43 @@ public class BroadcastService {
             session.sendMessage(new TextMessage(json));
         }
     }
+    /**
+     * Broadcast a message to all members of a room.
+     *
+     * @param dto        Message to send
+     * @param sessionIds Session IDs of room members
+     */
+    public void broadcastToRoom(MessageDTO dto, Collection<String> sessionIds, String senderSessionId) {
+        try {
+            String json = mapper.writeValueAsString(dto);
+            int successCount = 0;
+
+            for (String sessionId : sessionIds) {
+
+                if (sessionId.equals(senderSessionId)) {
+                    continue;
+                }
+
+                WebSocketSession session = sessionRegistry.findSessionById(sessionId);
+                if (session == null || !session.isOpen()) {
+                    continue;
+                }
+
+                try {
+                    session.sendMessage(new TextMessage(json));
+                    successCount++;
+                } catch (IOException e) {
+                    log.warn("[ROOM_BROADCAST_FAILED] sessionId={}", sessionId);
+                }
+            }
+
+            log.info("[ROOM_BROADCAST] Room message from [{}] -> {} clients",
+                    dto.getSender(), successCount);
+
+        } catch (IOException e) {
+            log.error("[ROOM_BROADCAST_ERROR] {}", e.getMessage());
+        }
+    }
+
+
 }
