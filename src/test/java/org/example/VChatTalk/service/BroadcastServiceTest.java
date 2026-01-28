@@ -17,6 +17,7 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.Mockito.*;
 
@@ -121,5 +122,97 @@ class BroadcastServiceTest {
         // Assert
         verify(sessionA).sendMessage(any(TextMessage.class)); // Attempted
         verify(sessionB).sendMessage(any(TextMessage.class)); // Still executed
+    }
+    @Test
+    @DisplayName("broadcastToRoom - should send to all room members except sender")
+    void broadcastToRoom_excludeSender() throws IOException {
+        WebSocketSession memberA = mock(WebSocketSession.class);
+        WebSocketSession memberB = mock(WebSocketSession.class);
+
+        when(memberA.isOpen()).thenReturn(true);
+        when(memberB.isOpen()).thenReturn(true);
+
+        when(sessionRegistry.findSessionById("A")).thenReturn(memberA);
+        when(sessionRegistry.findSessionById("B")).thenReturn(memberB);
+
+        MessageDTO msg = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("Alice")
+                .content("Hello Room")
+                .build();
+
+        broadcastService.broadcastToRoom(
+                msg,
+                Set.of("sender", "A", "B"),
+                "sender"
+        );
+
+        verify(memberA).sendMessage(any());
+        verify(memberB).sendMessage(any());
+    }
+
+    @Test
+    @DisplayName("broadcastToRoom - should do nothing when room has no members")
+    void broadcastToRoom_emptyRoom() throws IOException {
+        MessageDTO msg = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .content("Hello")
+                .build();
+
+        broadcastService.broadcastToRoom(msg, Set.of(), "sender");
+
+        verifyNoInteractions(sessionRegistry);
+    }
+
+    @Test
+    @DisplayName("broadcastToRoom - should skip closed sessions")
+    void broadcastToRoom_skipClosedSession() throws IOException {
+        WebSocketSession member = mock(WebSocketSession.class);
+
+        when(member.isOpen()).thenReturn(false);
+        when(sessionRegistry.findSessionById("A")).thenReturn(member);
+
+        MessageDTO msg = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .content("Hello")
+                .build();
+
+        broadcastService.broadcastToRoom(
+                msg,
+                Set.of("A"),
+                "sender"
+        );
+
+        verify(member, never()).sendMessage(any());
+    }
+
+    @Test
+    @DisplayName("broadcastToRoom - should continue if one session fails")
+    void broadcastToRoom_continueOnFailure() throws IOException {
+        WebSocketSession memberA = mock(WebSocketSession.class);
+        WebSocketSession memberB = mock(WebSocketSession.class);
+
+        when(memberA.isOpen()).thenReturn(true);
+        when(memberB.isOpen()).thenReturn(true);
+
+        when(sessionRegistry.findSessionById("A")).thenReturn(memberA);
+        when(sessionRegistry.findSessionById("B")).thenReturn(memberB);
+
+        doThrow(new IOException("IO error"))
+                .when(memberA).sendMessage(any());
+
+        MessageDTO msg = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .content("Hello")
+                .build();
+
+        broadcastService.broadcastToRoom(
+                msg,
+                Set.of("A", "B"),
+                "sender"
+        );
+
+        verify(memberA).sendMessage(any());
+        verify(memberB).sendMessage(any());
     }
 }

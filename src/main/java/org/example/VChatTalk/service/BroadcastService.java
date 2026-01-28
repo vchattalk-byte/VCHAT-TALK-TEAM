@@ -67,11 +67,12 @@ public class BroadcastService {
             session.sendMessage(new TextMessage(json));
         }
     }
+
     /**
      * Broadcast a message to all members of a room.
-     *
-     * @param dto        Message to send
-     * @param sessionIds Session IDs of room members
+     * @param dto             Message to send
+     * @param sessionIds      Session IDs of room members
+     * @param senderSessionId Session ID of the sender (excluded from broadcast)
      */
     public void broadcastToRoom(MessageDTO dto, Collection<String> sessionIds, String senderSessionId) {
         try {
@@ -104,6 +105,5 @@ public class BroadcastService {
             log.error("[ROOM_BROADCAST_ERROR] {}", e.getMessage());
         }
     }
-
 
 }

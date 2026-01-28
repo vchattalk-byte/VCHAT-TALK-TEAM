@@ -8,12 +8,11 @@
     import org.example.VChatTalk.model.UserSession;
     import org.example.VChatTalk.util.AnsiColor;
     import org.example.VChatTalk.util.PrivateChatRegistry;
+    import org.example.VChatTalk.util.RoomRegistry;
     import org.example.VChatTalk.util.SessionRegistry;
     import org.example.VChatTalk.util.UserRegistry;
     import org.springframework.stereotype.Service;
     import org.springframework.web.socket.WebSocketSession;
-    import org.example.VChatTalk.util.RoomRegistry;
-
 
     import java.io.IOException;
     import java.time.Instant;
@@ -80,7 +79,8 @@
                     }
                 }
                 case ROOM -> {
-                    String roomId = roomRegistry.getRoomOfSession(sessionId).orElseThrow();
+                    String roomId = roomRegistry.getRoomOfSession(sessionId)
+                            .orElseThrow(() -> new IllegalStateException("User is in ROOM context but not assigned to any room"));
                     handleRoomMessage(sender, message, roomId);
                 }
                 case GLOBAL -> broadcastService.broadcast(message, senderSession);
