@@ -9,5 +9,4 @@ public class VChatTalkApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(VChatTalkApplication.class, args);
 	}
-
 }

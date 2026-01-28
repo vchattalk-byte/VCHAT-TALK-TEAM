@@ -106,4 +106,54 @@ public class BroadcastService {
         }
     }
 
+    /**
+     * Broadcast message to a specific set of target sessions (e.g. room members or private chat).
+     * Formats message if it belongs to a room context.
+     *
+     * @param dto        message to send
+     * @param sessionIds target session IDs
+     */
+    public void broadcastToTargets(MessageDTO dto, Collection<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            log.debug("[BROADCAST_TO_TARGETS] No sessions provided.");
+            return;
+        }
+
+        try {
+            // Format message for room if applicable
+            String formattedContent = dto.getContent();
+            if (dto.getRoomId() != null && dto.getRoomId().startsWith("#")) {
+                formattedContent = String.format("[%s] %s: %s",
+                        dto.getRoomId(), dto.getSender(), dto.getContent());
+            }
+
+            MessageDTO formattedDto = MessageDTO.builder()
+                    .type(dto.getType())
+                    .sender(dto.getSender())
+                    .content(formattedContent)
+                    .timestamp(dto.getTimestamp())
+                    .roomId(dto.getRoomId())
+                    .build();
+
+            String json = mapper.writeValueAsString(formattedDto);
+            int successCount = 0;
+
+            for (String id : sessionIds) {
+                WebSocketSession session = sessionRegistry.findSessionById(id);
+                if (session == null || !session.isOpen()) continue;
+
+                try {
+                    session.sendMessage(new TextMessage(json));
+                    successCount++;
+                } catch (IOException e) {
+                    log.warn("[BROADCAST_TO_TARGETS_FAILED] sessionId={} - {}", id, e.getMessage());
+                }
+            }
+
+            log.info("[BROADCAST_TO_TARGETS] Sender: [{}] -> {} sessions",
+                    dto.getSender(), successCount);
+        } catch (IOException e) {
+            log.error("[BROADCAST_TO_TARGETS_ERROR] {}", e.getMessage());
+        }
+    }
 }

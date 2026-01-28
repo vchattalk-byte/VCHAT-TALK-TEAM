@@ -215,4 +215,104 @@ class BroadcastServiceTest {
         verify(memberA).sendMessage(any());
         verify(memberB).sendMessage(any());
     }
+
+    // ========== US-6.5 ADDITIONAL TESTS ==========
+    @Test
+    @DisplayName("broadcastToTargets - should send formatted room message to all target sessions")
+    void broadcastToTargets_sendToAllTargets() throws IOException {
+        WebSocketSession session1 = mock(WebSocketSession.class);
+        WebSocketSession session2 = mock(WebSocketSession.class);
+
+        when(session1.isOpen()).thenReturn(true);
+        when(session2.isOpen()).thenReturn(true);
+        when(sessionRegistry.findSessionById("S1")).thenReturn(session1);
+        when(sessionRegistry.findSessionById("S2")).thenReturn(session2);
+
+        MessageDTO dto = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserA")
+                .content("Hello team")
+                .roomId("#team-room")
+                .build();
+
+        broadcastService.broadcastToTargets(dto, Set.of("S1", "S2"));
+
+        String expectedJson = mapper.writeValueAsString(
+                MessageDTO.builder()
+                        .type(MessageType.MESSAGE)
+                        .sender("UserA")
+                        .content("[#team-room] UserA: Hello team")
+                        .roomId("#team-room")
+                        .build()
+        );
+
+        verify(session1).sendMessage(new TextMessage(expectedJson));
+        verify(session2).sendMessage(new TextMessage(expectedJson));
+    }
+
+    @Test
+    @DisplayName("broadcastToTargets - should skip closed sessions and continue sending others")
+    void broadcastToTargets_skipClosedSessions() throws IOException {
+        WebSocketSession closedSession = mock(WebSocketSession.class);
+        WebSocketSession openSession = mock(WebSocketSession.class);
+
+        when(closedSession.isOpen()).thenReturn(false);
+        when(openSession.isOpen()).thenReturn(true);
+        when(sessionRegistry.findSessionById("S1")).thenReturn(closedSession);
+        when(sessionRegistry.findSessionById("S2")).thenReturn(openSession);
+
+        MessageDTO dto = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserB")
+                .content("Message to active sessions")
+                .roomId("#dev-room")
+                .build();
+
+        broadcastService.broadcastToTargets(dto, Set.of("S1", "S2"));
+
+        verify(closedSession, never()).sendMessage(any());
+        verify(openSession, times(1)).sendMessage(any());
+    }
+
+    @Test
+    @DisplayName("broadcastToTargets - should continue even if one session throws IOException")
+    void broadcastToTargets_continueWhenIOExceptionOccurs() throws IOException {
+        WebSocketSession faultySession = mock(WebSocketSession.class);
+        WebSocketSession validSession = mock(WebSocketSession.class);
+
+        when(faultySession.isOpen()).thenReturn(true);
+        when(validSession.isOpen()).thenReturn(true);
+        when(sessionRegistry.findSessionById("A")).thenReturn(faultySession);
+        when(sessionRegistry.findSessionById("B")).thenReturn(validSession);
+
+        doThrow(new IOException("Simulated failure")).when(faultySession).sendMessage(any());
+
+        MessageDTO dto = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserC")
+                .content("Testing broadcast with one failure")
+                .roomId("#test-room")
+                .build();
+
+        broadcastService.broadcastToTargets(dto, Set.of("A", "B"));
+
+        verify(faultySession).sendMessage(any()); // attempted
+        verify(validSession).sendMessage(any());  // still delivered
+    }
+
+    @Test
+    @DisplayName("broadcastToTargets - should do nothing when sessionIds list is empty")
+    void broadcastToTargets_emptySessionList() {
+        MessageDTO dto = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("System")
+                .content("No sessions to send")
+                .roomId("#empty-room")
+                .build();
+
+        broadcastService.broadcastToTargets(dto, Set.of());
+
+        verifyNoInteractions(sessionRegistry);
+    }
+
 }
