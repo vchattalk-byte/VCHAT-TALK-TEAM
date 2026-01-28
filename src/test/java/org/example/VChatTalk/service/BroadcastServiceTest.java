@@ -334,6 +334,37 @@ class BroadcastServiceTest {
         String expectedJson = mapper.writeValueAsString(dto);
         verify(validSession).sendMessage(new TextMessage(expectedJson));
     }
+    @Test
+    @DisplayName("broadcastToTargets - should send unformatted message when roomId is null or not starting with #")
+    void broadcastToTargets_sendUnformattedMessage_whenNoRoomId() throws IOException {
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(session.isOpen()).thenReturn(true);
+        when(sessionRegistry.findSessionById("S1")).thenReturn(session);
 
+        // case 1: roomId is null
+        MessageDTO dtoWithoutRoom = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserZ")
+                .content("General message")
+                .roomId(null)
+                .build();
 
+        broadcastService.broadcastToTargets(dtoWithoutRoom, Set.of("S1"));
+
+        String expectedJson1 = mapper.writeValueAsString(dtoWithoutRoom);
+        verify(session, times(1)).sendMessage(new TextMessage(expectedJson1));
+
+        // case 2: roomId does not start with '#'
+        MessageDTO dtoNonRoom = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserZ")
+                .content("Private message")
+                .roomId("dev-room")
+                .build();
+
+        broadcastService.broadcastToTargets(dtoNonRoom, Set.of("S1"));
+
+        String expectedJson2 = mapper.writeValueAsString(dtoNonRoom);
+        verify(session, times(1)).sendMessage(new TextMessage(expectedJson2));
+    }
 }
