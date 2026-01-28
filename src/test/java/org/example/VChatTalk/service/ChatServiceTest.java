@@ -5,6 +5,7 @@ import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.example.VChatTalk.model.UserSession;
 import org.example.VChatTalk.util.PrivateChatRegistry;
+import org.example.VChatTalk.util.RoomRegistry;
 import org.example.VChatTalk.util.SessionRegistry;
 import org.example.VChatTalk.util.UserRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -30,6 +33,7 @@ class ChatServiceTest {
     @Mock private PrivateChatRegistry privateChatRegistry;
     @Mock private BroadcastService broadcastService;
     @Mock private WebSocketSession senderSession;
+    @Mock private RoomRegistry roomRegistry;
 
     @InjectMocks
     private ChatService chatService;
@@ -152,4 +156,66 @@ class ChatServiceTest {
 
         assertThrows(IllegalStateException.class, () -> chatService.handleMessage(SENDER_ID, dto));
     }
+    @Test
+    @DisplayName("Route - ROOM with no members should NOT broadcast")
+    void routeMessage_RoomMode_NoMembers() throws IOException {
+        String roomId = "room-1";
+
+        MessageDTO dto = MessageDTO.builder()
+                .content("hello room")
+                .build();
+
+        UserSession roomSession = UserSession.builder()
+                .sessionId(SENDER_ID)
+                .username(SENDER_NAME)
+                .context(ChatContext.ROOM)
+                .build();
+
+        when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
+        when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
+        when(userRegistry.getSession(SENDER_ID)).thenReturn(roomSession);
+
+        when(roomRegistry.getRoomOfSession(SENDER_ID))
+                .thenReturn(Optional.of(roomId));
+
+        chatService.routeMessage(senderSession, dto);
+
+        verify(broadcastService, never()).broadcastToRoom(any(), anyCollection(), anyString());
+    }
+    @Test
+    @DisplayName("Route - ROOM context but no room assigned should throw exception")
+    void routeMessage_RoomMode_NoRoom() {
+        // given
+        UserSession roomUser = UserSession.builder()
+                .sessionId(SENDER_ID)
+                .username(SENDER_NAME)
+                .context(ChatContext.ROOM)
+                .build();
+
+        when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
+        when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
+        when(userRegistry.getSession(SENDER_ID)).thenReturn(roomUser);
+
+        when(roomRegistry.getRoomOfSession(SENDER_ID))
+                .thenReturn(Optional.empty());
+
+        MessageDTO dto = MessageDTO.builder()
+                .content("hello room")
+                .build();
+
+        // when + then
+        IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> chatService.routeMessage(senderSession, dto)
+        );
+
+        assertEquals(
+                "User is in ROOM context but not assigned to any room",
+                ex.getMessage()
+        );
+
+        verify(broadcastService, never())
+                .broadcastToRoom(any(), any(), any());
+    }
+
 }

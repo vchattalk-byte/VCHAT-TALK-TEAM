@@ -8,6 +8,7 @@
     import org.example.VChatTalk.model.UserSession;
     import org.example.VChatTalk.util.AnsiColor;
     import org.example.VChatTalk.util.PrivateChatRegistry;
+    import org.example.VChatTalk.util.RoomRegistry;
     import org.example.VChatTalk.util.SessionRegistry;
     import org.example.VChatTalk.util.UserRegistry;
     import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@
         private final UserRegistry userRegistry;
         private final PrivateChatRegistry privateChatRegistry;
         private final BroadcastService broadcastService;
+        private final RoomRegistry roomRegistry;
 
         // ========== MESSAGE ROUTING ==========
         private void recoverFromBrokenPrivateContext(WebSocketSession session, String sessionId)
@@ -76,7 +78,11 @@
                         recoverFromBrokenPrivateContext(senderSession, sessionId);
                     }
                 }
-                case ROOM -> handleRoomMessage(senderSession, message);
+                case ROOM -> {
+                    String roomId = roomRegistry.getRoomOfSession(sessionId)
+                            .orElseThrow(() -> new IllegalStateException("User is in ROOM context but not assigned to any room"));
+                    handleRoomMessage(sender, message, roomId);
+                }
                 case GLOBAL -> broadcastService.broadcast(message, senderSession);
             }
         }
@@ -199,8 +205,14 @@
         /**
          * Handles broadcasting a message to a specific room.
          */
-        private void handleRoomMessage(WebSocketSession senderSession, MessageDTO message) throws IOException {
-            // 🟡 TODO: Update and Uncomment when RoomRegistry is ready
+        private void handleRoomMessage(UserSession sender, MessageDTO message, String roomId) throws IOException {
+            var members = roomRegistry.getRoomMembers(roomId);
+            if (members.isEmpty()) {
+                log.warn("Room {} has no members", roomId);
+                return;
+            }
+
+            broadcastService.broadcastToRoom(message, members, sender.getSessionId());
         }
 
         /**
