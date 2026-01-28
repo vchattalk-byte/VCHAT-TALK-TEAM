@@ -110,12 +110,26 @@ public class BroadcastService {
      * Broadcast message to a specific set of target sessions (e.g. room members or private chat).
      * Formats message if it belongs to a room context.
      *
-     * @param dto        message to send
-     * @param sessionIds target session IDs
+     * <p>
+     * This method sends the message to all provided {@code sessionIds}, including the sender
+     * if their session ID is present in the collection. Callers are responsible for excluding
+     * the sender from {@code sessionIds} if they do not want the sender to receive the message.
+     * This differs from {@link #broadcastToRoom(MessageDTO, Collection, String)} which always
+     * excludes the sender based on {@code senderSessionId}.
+     * </p>
+     *
+     * @param dto        message to send (must have non-null sender and content)
+     * @param sessionIds target session IDs (may include the sender)
      */
     public void broadcastToTargets(MessageDTO dto, Collection<String> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
-            log.debug("[BROADCAST_TO_TARGETS] No sessions provided.");
+            log.debug("[BROADCAST_TO_TARGETS] No sessionIds provided. Skipping broadcast.");
+            return;
+        }
+
+        // Defensive null check for dto and core fields
+        if (dto == null || dto.getSender() == null || dto.getContent() == null) {
+            log.warn("[BROADCAST_TO_TARGETS] Invalid message: missing sender or content. Skipped.");
             return;
         }
 
@@ -127,33 +141,37 @@ public class BroadcastService {
                         dto.getRoomId(), dto.getSender(), dto.getContent());
             }
 
+            // Prepare serialized copy
             MessageDTO formattedDto = MessageDTO.builder()
                     .type(dto.getType())
                     .sender(dto.getSender())
                     .content(formattedContent)
-                    .timestamp(dto.getTimestamp())
                     .roomId(dto.getRoomId())
+                    .timestamp(dto.getTimestamp())
                     .build();
 
             String json = mapper.writeValueAsString(formattedDto);
             int successCount = 0;
 
-            for (String id : sessionIds) {
-                WebSocketSession session = sessionRegistry.findSessionById(id);
-                if (session == null || !session.isOpen()) continue;
+            for (String sessionId : sessionIds) {
+                WebSocketSession session = sessionRegistry.findSessionById(sessionId);
+
+                if (session == null || !session.isOpen()) {
+                    continue;
+                }
 
                 try {
                     session.sendMessage(new TextMessage(json));
                     successCount++;
                 } catch (IOException e) {
-                    log.warn("[BROADCAST_TO_TARGETS_FAILED] sessionId={} - {}", id, e.getMessage());
+                    log.warn("[BROADCAST_TO_TARGETS_FAILED] sessionId={} - {}", sessionId, e.getMessage());
                 }
             }
 
-            log.info("[BROADCAST_TO_TARGETS] Sender: [{}] -> {} sessions",
-                    dto.getSender(), successCount);
+            log.info("[BROADCAST_TO_TARGETS] Sender: [{}] -> {} sessions", dto.getSender(), successCount);
         } catch (IOException e) {
             log.error("[BROADCAST_TO_TARGETS_ERROR] {}", e.getMessage());
         }
     }
+
 }

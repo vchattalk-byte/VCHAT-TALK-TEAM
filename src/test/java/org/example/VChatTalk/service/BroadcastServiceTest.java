@@ -314,5 +314,26 @@ class BroadcastServiceTest {
 
         verifyNoInteractions(sessionRegistry);
     }
+    @Test
+    @DisplayName("broadcastToTargets - should send unformatted message when not in room context and skip null sessions")
+    void broadcastToTargets_unformattedAndSkipNullSessions() throws IOException {
+        WebSocketSession validSession = mock(WebSocketSession.class);
+        when(validSession.isOpen()).thenReturn(true);
+        when(sessionRegistry.findSessionById("S1")).thenReturn(validSession);
+        when(sessionRegistry.findSessionById("S2")).thenReturn(null); // simulate stale session
+
+        MessageDTO dto = MessageDTO.builder()
+                .type(MessageType.MESSAGE)
+                .sender("UserX")
+                .content("Direct message")
+                .roomId("private-123") // not a room context
+                .build();
+
+        broadcastService.broadcastToTargets(dto, Set.of("S1", "S2"));
+
+        String expectedJson = mapper.writeValueAsString(dto);
+        verify(validSession).sendMessage(new TextMessage(expectedJson));
+    }
+
 
 }
