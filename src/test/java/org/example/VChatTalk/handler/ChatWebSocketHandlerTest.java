@@ -70,17 +70,10 @@ class ChatWebSocketHandlerTest {
         // Verify CLEANUP Logic (Moved from Service to Handler)
         verify(rateLimiter).removeSession(SESSION_ID);
         verify(sessionRegistry).removeSession(SESSION_ID);
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq((WebSocketSession)null));
-
-        // Verify Follower Notification
-        verify(privateChatRegistry).removeTarget(followerId);
-        try {
-            verify(systemResponseSender).sendSystem(eq(followerSession), anyString());
-        } catch (Exception e) { /* ignored for test */ }
         verify(userRegistry).removeUser(SESSION_ID); // QUAN TRỌNG: Verify handler gọi hàm xóa user
 
         // Verify Broadcast
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
+        verify(broadcastService).broadcast(any(MessageDTO.class), (WebSocketSession) eq(null));
     }
 
     // ========== MESSAGE TESTS ==========

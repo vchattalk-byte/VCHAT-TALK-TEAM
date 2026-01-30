@@ -17,7 +17,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -29,14 +28,20 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ChatServiceTest {
 
-    @Mock private SessionRegistry sessionRegistry;
-    @Mock private UserRegistry userRegistry;
-    @Mock private PrivateChatRegistry privateChatRegistry;
-    @Mock private BroadcastService broadcastService;
-    @Mock private ChatSession senderChatSession;
-    @Mock private ChatSession targetChatSession;
-    @Mock private WebSocketSession senderSession;
-    @Mock private RoomRegistry roomRegistry;
+    @Mock
+    private SessionRegistry sessionRegistry;
+    @Mock
+    private UserRegistry userRegistry;
+    @Mock
+    private PrivateChatRegistry privateChatRegistry;
+    @Mock
+    private BroadcastService broadcastService;
+    @Mock
+    private ChatSession senderChatSession;
+    @Mock
+    private ChatSession targetChatSession;
+    @Mock
+    private RoomRegistry roomRegistry;
 
     @InjectMocks
     private ChatService chatService;
@@ -54,7 +59,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("Join - Should succeed when username is valid and available")
     void handleJoin_Success() {
-        MessageDTO joinDto = MessageDTO.builder().sender("Alice!").build(); // '!' should be sanitized
+        MessageDTO joinDto = MessageDTO.builder().sender("Alice!").build();
 
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(false);
         when(userRegistry.tryRegisterUser(eq(SENDER_ID), eq("Alice"))).thenReturn(true);
@@ -66,6 +71,7 @@ class ChatServiceTest {
         assertEquals(MessageType.SYSTEM, result.getType());
         assertTrue(result.getContent().contains("Alice"));
         verify(userRegistry).tryRegisterUser(SENDER_ID, "Alice");
+        verify(userRegistry).updateContext(SENDER_ID, ChatContext.GLOBAL);
     }
 
     @Test
@@ -84,24 +90,17 @@ class ChatServiceTest {
     void routeMessage_GlobalMode() throws IOException {
         MessageDTO dto = MessageDTO.builder().content("Hello World").build();
 
-        UserSession globalSession = UserSession.builder()
-                .sessionId(SENDER_ID)
-                .username(SENDER_NAME)
-                .context(ChatContext.GLOBAL)
-                .build();
-
-        when(userRegistry.getSession(SENDER_ID)).thenReturn(globalSession);
-
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
         when(privateChatRegistry.getTarget(SENDER_ID)).thenReturn(null);
         when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
         when(senderChatSession.isOpen()).thenReturn(true);
 
-        chatService.routeMessage(senderChatSession.getId(), dto);
+        // Use NEW method with sessionId
+        chatService.routeMessage(SENDER_ID, dto);
 
         verify(broadcastService).broadcast(any(MessageDTO.class), eq(senderChatSession));
-        verify(broadcastService, never()).sendToSession(any(), any());
+        verify(senderChatSession, never()).sendMessage(any());
     }
 
     @Test
@@ -109,39 +108,25 @@ class ChatServiceTest {
     void routeMessage_PrivateMode() throws IOException {
         String targetName = "Bob";
         String targetSessId = "session-456";
-        WebSocketSession targetSession = mock(WebSocketSession.class);
         MessageDTO dto = MessageDTO.builder().content("Secret").build();
-
-        UserSession privateSession = UserSession.builder()
-                .sessionId(SENDER_ID)
-                .username(SENDER_NAME)
-                .context(ChatContext.PRIVATE)
-                .build();
-
-        when(userRegistry.getSession(SENDER_ID)).thenReturn(privateSession);
 
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
-
         when(privateChatRegistry.getTarget(SENDER_ID)).thenReturn(targetName);
         when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
         when(senderChatSession.isOpen()).thenReturn(true);
 
-        // Setup Bob's availability
         when(userRegistry.getSessionId(targetName)).thenReturn(targetSessId);
         when(sessionRegistry.findChatSessionById(targetSessId)).thenReturn(targetChatSession);
         when(targetChatSession.isOpen()).thenReturn(true);
 
-        // Use new method
+        // Use NEW method
         chatService.routeMessage(SENDER_ID, dto);
 
-        // Verify messages are sent via ChatSession.sendMessage() method
         verify(senderChatSession).sendMessage(any(MessageDTO.class));
         verify(targetChatSession).sendMessage(any(MessageDTO.class));
-
-        // Verify BroadcastService is NOT used for private messages in new implementation
-        verify(broadcastService, never()).sendToSession(any(), any());
         verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
+        verify(broadcastService, never()).sendToSession(any(), any());
     }
 
     @Test
@@ -151,39 +136,30 @@ class ChatServiceTest {
 
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
-
         when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
         when(senderChatSession.isOpen()).thenReturn(false);
 
-        chatService.routeMessage(senderSession, dto);
+        // Use NEW method
+        chatService.routeMessage(SENDER_ID, dto);
 
-        // Should clean up closed session
         verify(sessionRegistry).removeSession(SENDER_ID);
         verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
-        verify(senderChatSession, never()).sendMessage(any()),
-        verify(broadcastService, times(2)).sendToSession(any(), any());
-
-        ArgumentCaptor<MessageDTO> msgCaptor = ArgumentCaptor.forClass(MessageDTO.class);
-        verify(broadcastService).sendToSession(eq(targetSession), msgCaptor.capture());
-        assertTrue(msgCaptor.getValue().getContent().contains("[PM]"));
+        verify(senderChatSession, never()).sendMessage(any());
     }
 
-        @Test
+    @Test
     @DisplayName("Route - Should log warning when session not found at all")
     void routeMessage_SessionNotFound() throws IOException {
         MessageDTO dto = MessageDTO.builder().content("Hello").build();
 
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
-
-        // ONLY mock findChatSessionById - your code doesn't call findSessionById anymore!
         when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(null);
-        // Remove this line: when(sessionRegistry.findSessionById(SENDER_ID)).thenReturn(null);
 
         chatService.routeMessage(SENDER_ID, dto);
 
-        // No interactions with broadcast or send methods
         verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
+        verify(sessionRegistry, never()).removeSession(SENDER_ID);
     }
 
     // ========== LEAVE TESTS (UPDATED CLEANUP LOGIC) ==========
@@ -197,7 +173,7 @@ class ChatServiceTest {
         MessageDTO result = chatService.handleLeave(SENDER_ID);
 
         assertNotNull(result);
-
+        assertTrue(result.getContent().contains("left the chat"));
         verify(userRegistry, never()).removeUser(SENDER_ID);
         verify(privateChatRegistry, never()).removeTarget(SENDER_ID);
     }
@@ -210,10 +186,15 @@ class ChatServiceTest {
 
         assertThrows(IllegalStateException.class, () -> chatService.handleMessage(SENDER_ID, dto));
     }
+
     @Test
     @DisplayName("Route - ROOM with no members should NOT broadcast")
     void routeMessage_RoomMode_NoMembers() throws IOException {
         String roomId = "room-1";
+
+        // Create a proper WebSocketSession mock
+        org.springframework.web.socket.WebSocketSession webSocketSession =
+                mock(org.springframework.web.socket.WebSocketSession.class);
 
         MessageDTO dto = MessageDTO.builder()
                 .content("hello room")
@@ -225,26 +206,38 @@ class ChatServiceTest {
                 .context(ChatContext.ROOM)
                 .build();
 
+        // Setup the WebSocketSession mock
+        when(webSocketSession.getId()).thenReturn(SENDER_ID);
+
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
         when(userRegistry.getSession(SENDER_ID)).thenReturn(roomSession);
 
         when(roomRegistry.getRoomOfSession(SENDER_ID))
                 .thenReturn(Optional.of(roomId));
+        when(roomRegistry.getRoomMembers(roomId)).thenReturn(Set.of()); // Empty set
 
-        chatService.routeMessage(senderSession, dto);
+        // Pass the mocked WebSocketSession
+        chatService.routeMessage(webSocketSession, dto);
 
         verify(broadcastService, never()).broadcastToRoom(any(), anyCollection(), anyString());
     }
+
     @Test
     @DisplayName("Route - ROOM context but no room assigned should throw exception")
-    void routeMessage_RoomMode_NoRoom() {
-        // given
+    void routeMessage_RoomMode_NoRoom() throws IOException {
+        // Create a proper WebSocketSession mock
+        org.springframework.web.socket.WebSocketSession webSocketSession =
+                mock(org.springframework.web.socket.WebSocketSession.class);
+
         UserSession roomUser = UserSession.builder()
                 .sessionId(SENDER_ID)
                 .username(SENDER_NAME)
                 .context(ChatContext.ROOM)
                 .build();
+
+        // Setup the WebSocketSession mock
+        when(webSocketSession.getId()).thenReturn(SENDER_ID);
 
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
@@ -260,7 +253,7 @@ class ChatServiceTest {
         // when + then
         IllegalStateException ex = assertThrows(
                 IllegalStateException.class,
-                () -> chatService.routeMessage(senderSession, dto)
+                () -> chatService.routeMessage(webSocketSession, dto)
         );
 
         assertEquals(
