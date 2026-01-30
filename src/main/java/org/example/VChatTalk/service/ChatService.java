@@ -2,6 +2,7 @@
 
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
+    import org.example.VChatTalk.model.ChatSession;
     import org.example.VChatTalk.model.ChatContext;
     import org.example.VChatTalk.model.MessageDTO;
     import org.example.VChatTalk.model.MessageType;
@@ -49,8 +50,10 @@
             );
         }
         /**
-         * Route message to either global chat or private chat based on user's target
+         * OLD VERSION - Keep for backward compatibility
+         * @deprecated Use {@link #routeMessage(String, MessageDTO)} instead
          */
+        @Deprecated
         public void routeMessage(WebSocketSession senderSession, MessageDTO dto) throws IOException {
             String sessionId = senderSession.getId();
 
@@ -84,6 +87,34 @@
                     handleRoomMessage(sender, message, roomId);
                 }
                 case GLOBAL -> broadcastService.broadcast(message, senderSession);
+            }
+        }
+
+        /**
+         * NEW VERSION - Using sessionId and ChatSession abstraction
+         */
+        public void routeMessage(String sessionId, MessageDTO dto) throws IOException {
+            MessageDTO baseMessage = handleMessage(sessionId, dto);
+
+            String targetUsername = privateChatRegistry.getTarget(sessionId);
+
+            ChatSession senderChatSession = sessionRegistry.findChatSessionById(sessionId);
+
+            if (senderChatSession == null) {
+                log.warn("Cannot route message - session not found: {}", sessionId);
+                return; // Early exit, session no longer exists
+            }
+
+            if (!senderChatSession.isOpen()) {
+                log.warn("Cannot route message - chat session is closed: {}", sessionId);
+                sessionRegistry.removeSession(sessionId);
+                return;
+            }
+
+            if (targetUsername != null) {
+                handlePrivateMessage(senderChatSession, baseMessage, targetUsername);
+            } else {
+                broadcastService.broadcast(baseMessage, senderChatSession);
             }
         }
 
@@ -164,19 +195,20 @@
          * Handle private message routing
          * Validates target user and sends message to both sender and receiver
          */
+        @Deprecated
         private void handlePrivateMessage(WebSocketSession sender, MessageDTO message, String targetUsername)
                 throws IOException {
 
             // Find target session using UserRegistry
             String targetSessionId = userRegistry.getSessionId(targetUsername);
             if (targetSessionId == null) {
-                sendUserOfflineMessage(sender, targetUsername);
+                sendUserOfflineMessage((ChatSession) sender, targetUsername);
                 return;
             }
 
             WebSocketSession targetSession = sessionRegistry.findSessionById(targetSessionId);
             if (targetSession == null || !targetSession.isOpen()) {
-                sendUserOfflineMessage(sender, targetUsername);
+                sendUserOfflineMessage((ChatSession) sender, targetUsername);
                 return;
             }
 
@@ -216,14 +248,33 @@
         }
 
         /**
-         * Send "user offline" notification and remove target
+         * NEW: Handle private message with ChatSession
          */
-        private void sendUserOfflineMessage(WebSocketSession session, String targetUsername) throws IOException {
-            MessageDTO offlineMsg = systemMessage(
-                    AnsiColor.RED + "User '" + targetUsername + "' is offline. " +
-                            "Returning to global chat." + AnsiColor.RESET
-            );
-            broadcastService.sendToSession(session, offlineMsg);
+        private void handlePrivateMessage(ChatSession sender, MessageDTO message, String targetUsername)
+                throws IOException {
+            // Find target session using UserRegistry
+            String targetSessionId = userRegistry.getSessionId(targetUsername);
+            if (targetSessionId == null) {
+                sendUserOfflineMessage(sender, targetUsername);
+                return;
+            }
+
+            ChatSession targetSession = sessionRegistry.findChatSessionById(targetSessionId);
+            if (targetSession == null || !targetSession.isOpen()) {
+                sendUserOfflineMessage(sender, targetUsername);
+                return;
+            }
+
+            // Send messages using ChatSession abstraction
+            sendPrivateMessages(sender, targetSession, message, targetUsername);
+        }
+
+        /**
+         * Send "user offline" notification and remove target (ChatSession version)
+         */
+        private void sendUserOfflineMessage(ChatSession session, String targetUsername) throws IOException {
+            MessageDTO offlineMsg = createOfflineMessage(targetUsername);
+            session.sendMessage(offlineMsg);
             privateChatRegistry.removeTarget(session.getId());
         }
 
@@ -245,5 +296,42 @@
         private String sanitize(String input) {
             if (input == null) return "";
             return input.replaceAll("[^a-zA-Z0-9_\\s-]", "").trim();
+        }
+
+        /**
+         * Create offline message DTO
+         */
+        private MessageDTO createOfflineMessage(String targetUsername) {
+            return systemMessage(
+                    AnsiColor.RED + "User '" + targetUsername + "' is offline. " +
+                            "Returning to global chat." + AnsiColor.RESET
+            );
+        }
+
+        /**
+         * Helper: Send private messages between ChatSessions
+         */
+        private void sendPrivateMessages(ChatSession sender, ChatSession target,
+                                         MessageDTO message, String targetUsername) throws IOException {
+            // Send PM to target with [PM] prefix
+            MessageDTO toTarget = MessageDTO.builder()
+                    .type(message.getType())
+                    .sender(message.getSender())
+                    .timestamp(message.getTimestamp())
+                    .content(AnsiColor.GREEN + "[PM] " + message.getContent() + AnsiColor.RESET)
+                    .build();
+            target.sendMessage(toTarget);
+
+            // Echo to sender with [You → target] prefix
+            MessageDTO selfEcho = MessageDTO.builder()
+                    .type(message.getType())
+                    .sender(message.getSender())
+                    .timestamp(message.getTimestamp())
+                    .content(AnsiColor.CYAN + "[You → " + targetUsername + "] " +
+                            message.getContent() + AnsiColor.RESET)
+                    .build();
+            sender.sendMessage(selfEcho);
+
+            log.info("[PRIVATE_MSG] {} → {}: {}", message.getSender(), targetUsername, message.getContent());
         }
     }

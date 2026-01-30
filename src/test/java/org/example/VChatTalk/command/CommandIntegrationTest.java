@@ -1,5 +1,6 @@
 package org.example.VChatTalk.command;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.VChatTalk.command.impl.*;
 import org.example.VChatTalk.command.service.CommandParserService;
 import org.example.VChatTalk.util.*;
@@ -37,7 +38,7 @@ class CommandIntegrationTest {
     @BeforeEach
     void setUp() {
         // 1. Instantiate Real Components
-        sessionRegistry = new SessionRegistry();
+        sessionRegistry = new SessionRegistry(userRegistry, new ObjectMapper());
         commandParser = new CommandParserService();
         userRegistry = new UserRegistry();
         privateChatRegistry = new PrivateChatRegistry();

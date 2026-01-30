@@ -75,7 +75,7 @@ public class MessageProcessor {
     private boolean handleJoinMessage(WebSocketSession session, String sessionId, MessageDTO dto) {
         try {
             MessageDTO systemMessage = chatService.handleJoin(sessionId, dto);
-            broadcastService.broadcast(systemMessage, null);
+            broadcastService.broadcast(systemMessage, (WebSocketSession) null);
             systemResponseSender.sendSystem(session, MessageConstants.MSG_JOINED_SUCCESS);
             return true;
         } catch (IOException e) {
@@ -116,7 +116,7 @@ public class MessageProcessor {
         }
 
         try {
-            chatService.routeMessage(session, dto);
+            chatService.routeMessage(sessionId, dto);
             return true;
         } catch (IOException e) {
             log.error("Failed to route message", e);

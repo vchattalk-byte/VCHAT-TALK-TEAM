@@ -73,7 +73,7 @@ class ChatWebSocketHandlerTest {
         verify(userRegistry).removeUser(SESSION_ID); // QUAN TRỌNG: Verify handler gọi hàm xóa user
 
         // Verify Broadcast
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
+        verify(broadcastService).broadcast(any(MessageDTO.class), (WebSocketSession) eq(null));
     }
 
     // ========== MESSAGE TESTS ==========

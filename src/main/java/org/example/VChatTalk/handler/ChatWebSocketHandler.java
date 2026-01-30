@@ -78,7 +78,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         userRegistry.removeUser(sessionId);
 
         if (leaveMessage != null) {
-            broadcastService.broadcast(leaveMessage, null);
+            broadcastService.broadcast(leaveMessage, (WebSocketSession) null);
         }
 
         log.info("[DISCONNECT] {} - Status: {}", sessionId, status.getCode());

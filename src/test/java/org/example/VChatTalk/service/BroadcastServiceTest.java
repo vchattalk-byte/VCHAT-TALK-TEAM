@@ -74,7 +74,7 @@ class BroadcastServiceTest {
         when(sessionRegistry.getAllSessions()).thenReturn(List.of(sessionA, sessionB));
 
         // Act
-        broadcastService.broadcast(messageDto, null);
+        broadcastService.broadcast(messageDto, (WebSocketSession) null);
 
         // Assert: Both sessions receive it
         verify(sessionA, times(1)).sendMessage(any(TextMessage.class));
@@ -89,7 +89,7 @@ class BroadcastServiceTest {
         when(sessionRegistry.getAllSessions()).thenReturn(List.of(sessionA, sessionB));
 
         // Act: System broadcast
-        broadcastService.broadcast(messageDto, null);
+        broadcastService.broadcast(messageDto, (WebSocketSession) null);
 
         // Assert: Only A gets it
         verify(sessionA, times(1)).sendMessage(any(TextMessage.class));
@@ -117,7 +117,7 @@ class BroadcastServiceTest {
         doThrow(new IOException("Network error")).when(sessionA).sendMessage(any(TextMessage.class));
 
         // Act
-        broadcastService.broadcast(messageDto, null);
+        broadcastService.broadcast(messageDto, (WebSocketSession) null);
 
         // Assert
         verify(sessionA).sendMessage(any(TextMessage.class)); // Attempted

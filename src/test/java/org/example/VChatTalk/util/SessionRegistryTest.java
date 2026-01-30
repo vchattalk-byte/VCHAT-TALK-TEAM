@@ -1,5 +1,6 @@
 package org.example.VChatTalk.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
@@ -15,7 +16,7 @@ class SessionRegistryTest {
 
     @BeforeEach
     void setUp() {
-        registry = new SessionRegistry();
+        registry = new SessionRegistry(new UserRegistry(),new ObjectMapper());
     }
 
     @Test
