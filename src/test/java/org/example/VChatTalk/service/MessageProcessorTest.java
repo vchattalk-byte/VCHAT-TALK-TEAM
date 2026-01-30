@@ -62,7 +62,7 @@ class MessageProcessorTest {
 
         assertTrue(result);
         verify(chatService).handleJoin(eq(SESSION_ID), any());
-        verify(broadcastService).broadcast(systemMsg, null);
+        verify(broadcastService).broadcast(systemMsg, (WebSocketSession) null);
         verify(systemResponseSender).sendSystem(session, MessageConstants.MSG_JOINED_SUCCESS);
     }
 
@@ -92,7 +92,7 @@ class MessageProcessorTest {
         boolean result = messageProcessor.processMessage(session, payload);
 
         assertTrue(result);
-        verify(chatService).routeMessage(eq(session), any(MessageDTO.class));
+        verify(chatService).routeMessage(eq(session.getId()), any(MessageDTO.class));
         verifyNoInteractions(commandExecutor);
     }
 

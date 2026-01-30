@@ -76,7 +76,7 @@ class ChatWebSocketHandlerTest {
         // Verify Cleanup
         verify(rateLimiter).removeSession(SESSION_ID);
         verify(sessionRegistry).removeSession(SESSION_ID);
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(null));
+        verify(broadcastService).broadcast(any(MessageDTO.class), eq((WebSocketSession)null));
 
         // Verify Follower Notification
         verify(privateChatRegistry).removeTarget(followerId);

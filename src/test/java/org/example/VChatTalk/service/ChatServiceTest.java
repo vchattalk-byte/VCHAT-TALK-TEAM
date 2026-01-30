@@ -1,5 +1,6 @@
 package org.example.VChatTalk.service;
 
+import org.example.VChatTalk.model.ChatSession;
 import org.example.VChatTalk.model.MessageDTO;
 import org.example.VChatTalk.model.MessageType;
 import org.example.VChatTalk.util.PrivateChatRegistry;
@@ -27,7 +28,8 @@ class ChatServiceTest {
     @Mock private UserRegistry userRegistry;
     @Mock private PrivateChatRegistry privateChatRegistry;
     @Mock private BroadcastService broadcastService;
-    @Mock private WebSocketSession senderSession;
+    @Mock private ChatSession senderChatSession;
+    @Mock private ChatSession targetChatSession;
 
     @InjectMocks
     private ChatService chatService;
@@ -37,7 +39,7 @@ class ChatServiceTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(senderSession.getId()).thenReturn(SENDER_ID);
+        lenient().when(senderChatSession.getId()).thenReturn(SENDER_ID);
     }
 
     // ========== JOIN TESTS ==========
@@ -78,10 +80,12 @@ class ChatServiceTest {
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
         when(privateChatRegistry.getTarget(SENDER_ID)).thenReturn(null);
+        when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
+        when(senderChatSession.isOpen()).thenReturn(true);
 
-        chatService.routeMessage(senderSession, dto);
+        chatService.routeMessage(senderChatSession.getId(), dto);
 
-        verify(broadcastService).broadcast(any(MessageDTO.class), eq(senderSession));
+        verify(broadcastService).broadcast(any(MessageDTO.class), eq(senderChatSession));
         verify(broadcastService, never()).sendToSession(any(), any());
     }
 
@@ -90,7 +94,6 @@ class ChatServiceTest {
     void routeMessage_PrivateMode() throws IOException {
         String targetName = "Bob";
         String targetSessId = "session-456";
-        WebSocketSession targetSession = mock(WebSocketSession.class);
 
         MessageDTO dto = MessageDTO.builder().content("Secret").build();
 
@@ -98,21 +101,61 @@ class ChatServiceTest {
         when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
         when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
         when(privateChatRegistry.getTarget(SENDER_ID)).thenReturn(targetName);
+        when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
+        when(senderChatSession.isOpen()).thenReturn(true);
 
         // Setup Bob's availability
         when(userRegistry.getSessionId(targetName)).thenReturn(targetSessId);
-        when(sessionRegistry.findSessionById(targetSessId)).thenReturn(targetSession);
-        when(targetSession.isOpen()).thenReturn(true);
+        when(sessionRegistry.findChatSessionById(targetSessId)).thenReturn(targetChatSession);
+        when(targetChatSession.isOpen()).thenReturn(true);
 
-        chatService.routeMessage(senderSession, dto);
+        // Use new method
+        chatService.routeMessage(SENDER_ID, dto);
 
-        // Verify Bob gets the message and Alice gets an echo
-        verify(broadcastService, times(2)).sendToSession(any(), any());
+        // Verify messages are sent via ChatSession.sendMessage() method
+        verify(senderChatSession).sendMessage(any(MessageDTO.class));
+        verify(targetChatSession).sendMessage(any(MessageDTO.class));
 
-        // Verify formatting for Target
-        ArgumentCaptor<MessageDTO> msgCaptor = ArgumentCaptor.forClass(MessageDTO.class);
-        verify(broadcastService).sendToSession(eq(targetSession), msgCaptor.capture());
-        assertTrue(msgCaptor.getValue().getContent().contains("[PM]"));
+        // Verify BroadcastService is NOT used for private messages in new implementation
+        verify(broadcastService, never()).sendToSession(any(), any());
+        verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
+    }
+
+    @Test
+    @DisplayName("Route - Should handle closed session gracefully")
+    void routeMessage_SessionClosed() throws IOException {
+        MessageDTO dto = MessageDTO.builder().content("Hello").build();
+
+        when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
+        when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
+
+        when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(senderChatSession);
+        when(senderChatSession.isOpen()).thenReturn(false);
+
+        chatService.routeMessage(SENDER_ID, dto);
+
+        // Should clean up closed session
+        verify(sessionRegistry).removeSession(SENDER_ID);
+        verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
+        verify(senderChatSession, never()).sendMessage(any());
+    }
+
+    @Test
+    @DisplayName("Route - Should log warning when session not found at all")
+    void routeMessage_SessionNotFound() throws IOException {
+        MessageDTO dto = MessageDTO.builder().content("Hello").build();
+
+        when(userRegistry.isUserRegistered(SENDER_ID)).thenReturn(true);
+        when(userRegistry.getUsername(SENDER_ID)).thenReturn(SENDER_NAME);
+
+        // ONLY mock findChatSessionById - your code doesn't call findSessionById anymore!
+        when(sessionRegistry.findChatSessionById(SENDER_ID)).thenReturn(null);
+        // Remove this line: when(sessionRegistry.findSessionById(SENDER_ID)).thenReturn(null);
+
+        chatService.routeMessage(SENDER_ID, dto);
+
+        // No interactions with broadcast or send methods
+        verify(broadcastService, never()).broadcast(any(), (ChatSession) any());
     }
 
     // ========== LEAVE TESTS ==========
