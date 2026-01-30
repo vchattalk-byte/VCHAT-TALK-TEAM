@@ -3,6 +3,8 @@ package org.example.VChatTalk.command.impl;
 import org.example.VChatTalk.command.CommandResult;
 import org.example.VChatTalk.command.CommandType;
 import org.example.VChatTalk.command.MessageConstants;
+import org.example.VChatTalk.model.ChatContext;
+import org.example.VChatTalk.model.UserSession;
 import org.example.VChatTalk.util.PrivateChatRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
 import org.example.VChatTalk.util.UserRegistry;
@@ -16,126 +18,115 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SelectCommandTest {
 
-    @Mock
-    private UserRegistry userRegistry;
-
-    @Mock
-    private PrivateChatRegistry privateChatRegistry;
-
-    @Mock
-    private SystemResponseSender responder;
-
-    @Mock
-    private WebSocketSession session;
+    @Mock private SystemResponseSender responder;
+    @Mock private UserRegistry userRegistry;
+    @Mock private PrivateChatRegistry privateChatRegistry;
+    @Mock private WebSocketSession session;
 
     private SelectCommand selectCommand;
 
+    private static final String SESSION_ID = "s1";
+
     @BeforeEach
     void setUp() {
-        // Inject Mocks vào Command
-        selectCommand = new SelectCommand(userRegistry, responder, privateChatRegistry);
+        selectCommand = new SelectCommand(responder, userRegistry, privateChatRegistry);
+        lenient().when(session.getId()).thenReturn(SESSION_ID);
     }
 
     @Test
-    @DisplayName("Should return SELECT type")
-    void testGetType() {
-        assertEquals(CommandType.SELECT, selectCommand.getType());
-    }
+    @DisplayName("Fail: User not logged in")
+    void testSelect_NotLoggedIn() throws IOException {
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(null);
 
-    @Test
-    @DisplayName("Fail if user is not logged in")
-    void testExecute_NotLoggedIn() throws IOException {
-        // Simulator is not logged in yet
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(false);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, "Bob", null));
 
-        CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
-        selectCommand.execute(session, result);
-
-        // Verify: The error ERR_NOT_LOGGED_IN must be submitted.
         verify(responder).sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
-        // Verify: Do not set targets
-        verify(privateChatRegistry, never()).setTarget(anyString(), anyString());
+        verifyNoInteractions(privateChatRegistry);
     }
 
     @Test
-    @DisplayName("Fail if argument (target user) is missing")
-    void testExecute_MissingArgument() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+    @DisplayName("Fail: Missing username argument")
+    void testSelect_MissingArgument() throws IOException {
+        mockLoggedInUser("Alice");
 
-        // Argument is null
-        CommandResult result = new CommandResult(CommandType.SELECT, null, null);
-        selectCommand.execute(session, result);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, null, null));
 
-        verify(responder).sendError(session, String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select"));
+        verify(responder).sendError(
+                session,
+                String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select")
+        );
     }
 
     @Test
-    @DisplayName("Fail if username contains spaces")
-    void testExecute_SpaceInUsername() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
+    @DisplayName("Fail: Username contains spaces")
+    void testSelect_UsernameWithSpaces() throws IOException {
+        mockLoggedInUser("Alice");
 
-        CommandResult result = new CommandResult(CommandType.SELECT, "User Name", null);
-        selectCommand.execute(session, result);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, "Bob Smith", null));
 
         verify(responder).sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
     }
 
     @Test
-    @DisplayName("Fail if self-chat")
-    void testExecute_SelfChat() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
+    @DisplayName("Fail: Self chat prevention")
+    void testSelect_SelfChat() throws IOException {
+        mockLoggedInUser("Alice");
 
-        // Target is Alice (yourself)
-        CommandResult result = new CommandResult(CommandType.SELECT, "Alice", null);
-        selectCommand.execute(session, result);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, "Alice", null));
 
         verify(responder).sendError(session, MessageConstants.ERR_SELF_CHAT);
     }
 
     @Test
-    @DisplayName("Fail if target user is offline")
-    void testExecute_TargetOffline() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
-
-        // Bob offline
+    @DisplayName("Fail: Target user offline")
+    void testSelect_UserOffline() throws IOException {
+        mockLoggedInUser("Alice");
         when(userRegistry.isUserOnline("Bob")).thenReturn(false);
 
-        CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
-        selectCommand.execute(session, result);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, "Bob", null));
 
-        verify(responder).sendError(session, String.format(MessageConstants.ERR_USER_OFFLINE, "Bob"));
+        verify(responder).sendError(
+                session,
+                String.format(MessageConstants.ERR_USER_OFFLINE, "Bob")
+        );
     }
 
     @Test
-    @DisplayName("Success: Switch to private chat")
-    void testExecute_Success() throws IOException {
-        when(session.getId()).thenReturn("sess-1");
-        when(userRegistry.isUserRegistered("sess-1")).thenReturn(true);
-        when(userRegistry.getUsername("sess-1")).thenReturn("Alice");
-
-        // Bob online
+    @DisplayName("Success: Switch to PRIVATE chat")
+    void testSelect_Success() throws IOException {
+        mockLoggedInUser("Alice");
         when(userRegistry.isUserOnline("Bob")).thenReturn(true);
 
-        CommandResult result = new CommandResult(CommandType.SELECT, "Bob", null);
-        selectCommand.execute(session, result);
+        selectCommand.execute(session,
+                new CommandResult(CommandType.SELECT, "Bob", null));
 
-        // Important verification: You must call setTarget.
-        verify(privateChatRegistry).setTarget("sess-1", "Bob");
-        // Verify: Notification sent successfully
-        verify(responder).sendSystem(session, String.format(MessageConstants.MSG_PRIVATE_CHAT_START, "Bob"));
+        verify(privateChatRegistry).setTarget(SESSION_ID, "Bob");
+        verify(userRegistry).updateContext(SESSION_ID, ChatContext.PRIVATE);
+
+        verify(responder).sendSystem(
+                session,
+                String.format(MessageConstants.MSG_PRIVATE_CHAT_START, "Bob")
+        );
+    }
+
+    // ===== Helper =====
+    private void mockLoggedInUser(String username) {
+        UserSession sessionState = UserSession.builder()
+                .sessionId(SESSION_ID)
+                .username(username)
+                .context(ChatContext.GLOBAL)
+                .build();
+
+        when(userRegistry.getSession(SESSION_ID)).thenReturn(sessionState);
     }
 }

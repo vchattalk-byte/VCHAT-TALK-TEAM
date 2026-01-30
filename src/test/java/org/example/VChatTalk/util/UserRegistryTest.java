@@ -26,6 +26,8 @@ class UserRegistryTest {
     @Test
     @DisplayName("Success: Register new user")
     void testTryRegisterUser_Success() {
+        registry.addSession("sess-1");
+
         boolean result = registry.tryRegisterUser("sess-1", "alice");
         assertTrue(result);
         assertEquals("alice", registry.getUsername("sess-1"));
@@ -36,6 +38,9 @@ class UserRegistryTest {
     @Test
     @DisplayName("Fail: Username already taken")
     void testTryRegisterUser_UsernameTaken() {
+        registry.addSession("sess-1");
+        registry.addSession("sess-2");
+
         // First registration succeeds
         registry.tryRegisterUser("sess-1", "alice");
 
@@ -48,8 +53,12 @@ class UserRegistryTest {
     @Test
     @DisplayName("Fail: Session already registered")
     void testTryRegisterUser_SessionTaken() {
+        registry.addSession("sess-1");
+
         registry.tryRegisterUser("sess-1", "alice");
-        boolean result = registry.tryRegisterUser("sess-1", "bob");  // Same session
+        boolean result = registry.tryRegisterUser("sess-1", "bob");  // Same session trying to change name
+
+        // Session cannot re-register with a different username while still logged in
         assertFalse(result);
         assertEquals("alice", registry.getUsername("sess-1"));  // alice kept
     }
@@ -57,6 +66,8 @@ class UserRegistryTest {
     @Test
     @DisplayName("Fail: Null/blank inputs")
     void testTryRegisterUser_InvalidInputs() {
+        registry.addSession("sess-1");
+
         assertFalse(registry.tryRegisterUser(null, "alice"));
         assertFalse(registry.tryRegisterUser("sess-1", null));
         assertFalse(registry.tryRegisterUser("sess-1", ""));
@@ -68,6 +79,8 @@ class UserRegistryTest {
     @Test
     @DisplayName("getUsername: Returns Anonymous for unregistered")
     void testGetUsername_Unregistered() {
+        // Even if session exists but not registered
+        registry.addSession("sess-999");
         assertEquals("Anonymous", registry.getUsername("sess-999"));
     }
 
@@ -89,17 +102,21 @@ class UserRegistryTest {
     @Test
     @DisplayName("isUserRegistered: False for unregistered session")
     void testIsUserRegistered_False() {
+        registry.addSession("sess-unknown");
         assertFalse(registry.isUserRegistered("sess-unknown"));
     }
-
     // ========== REMOVAL ==========
 
     @Test
     @DisplayName("removeUser: Cleanup both mappings")
     void testRemoveUser() {
+        registry.addSession("sess-1");
         registry.tryRegisterUser("sess-1", "alice");
+
         registry.removeUser("sess-1");
 
+        // After remove, getUsername should return null (session gone) or Anonymous if we handle null gracefully
+        // In your UserRegistry: getUsername calls sessionUsernames.get(). If null -> returns "Anonymous".
         assertEquals("Anonymous", registry.getUsername("sess-1"));
         assertFalse(registry.isUserOnline("alice"));
         assertNull(registry.getSessionId("alice"));
@@ -110,12 +127,15 @@ class UserRegistryTest {
     void testRemoveUser_Unregistered() {
         assertDoesNotThrow(() -> registry.removeUser("sess-unknown"));
     }
-
     // ========== LISTING & COUNTING ==========
 
     @Test
     @DisplayName("countOnlineUsers: Accurate count")
     void testCountOnlineUsers() {
+        registry.addSession("s1");
+        registry.addSession("s2");
+        registry.addSession("s3");
+
         registry.tryRegisterUser("s1", "a");
         registry.tryRegisterUser("s2", "b");
         registry.tryRegisterUser("s3", "c");
@@ -125,6 +145,9 @@ class UserRegistryTest {
     @Test
     @DisplayName("getAllOnlineUsers: Returns all registered users")
     void testGetAllOnlineUsers() {
+        registry.addSession("s1");
+        registry.addSession("s2");
+
         registry.tryRegisterUser("s1", "alice");
         registry.tryRegisterUser("s2", "bob");
 
@@ -138,6 +161,7 @@ class UserRegistryTest {
     @Test
     @DisplayName("getAllOnlineUsers: Unmodifiable + thread-safe")
     void testGetAllOnlineUsers_Unmodifiable() {
+        registry.addSession("s1");
         registry.tryRegisterUser("s1", "alice");
         Collection<String> users = registry.getAllOnlineUsers();
 
@@ -149,6 +173,8 @@ class UserRegistryTest {
     @Test
     @DisplayName("Concurrent registration: Atomic username reservation")
     void testConcurrentRegistration() throws InterruptedException {
+        registry.addSession("sess-race");
+
         // Simulate race condition
         Runnable registerAlice = () -> registry.tryRegisterUser("sess-race", "alice");
 
@@ -166,6 +192,7 @@ class UserRegistryTest {
     @Test
     @DisplayName("Long usernames handled correctly")
     void testLongUsername() {
+        registry.addSession("s1");
         String longName = "a".repeat(50);
         boolean result = registry.tryRegisterUser("s1", longName);
         assertTrue(result);  // No length limit in registry
@@ -175,6 +202,7 @@ class UserRegistryTest {
     @Test
     @DisplayName("Special characters in username")
     void testSpecialCharacters() {
+        registry.addSession("s1");
         registry.tryRegisterUser("s1", "user@123!");
         assertEquals("user@123!", registry.getUsername("s1"));
         assertTrue(registry.isUserOnline("user@123!"));

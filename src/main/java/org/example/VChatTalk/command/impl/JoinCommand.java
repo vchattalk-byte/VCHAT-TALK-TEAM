@@ -8,6 +8,7 @@ import org.example.VChatTalk.command.MessageConstants;
 import org.example.VChatTalk.model.ChatContext;
 import org.example.VChatTalk.model.UserSession;
 import org.example.VChatTalk.util.PrivateChatRegistry;
+import org.example.VChatTalk.util.RoomRegistry;
 import org.example.VChatTalk.util.SystemResponseSender;
 import org.example.VChatTalk.util.UserRegistry;
 import org.springframework.stereotype.Component;
@@ -17,15 +18,15 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
-public class SelectCommand implements IChatCommand {
-
-    private final SystemResponseSender responder;
+public class JoinCommand implements IChatCommand {
     private final UserRegistry userRegistry;
+    private final RoomRegistry roomRegistry;
     private final PrivateChatRegistry privateChatRegistry;
+    private final SystemResponseSender responder;
 
     @Override
     public CommandType getType() {
-        return CommandType.SELECT;
+        return CommandType.JOIN;
     }
 
     @Override
@@ -33,46 +34,46 @@ public class SelectCommand implements IChatCommand {
         String sessionId = session.getId();
         UserSession userSession = userRegistry.getSession(sessionId);
 
-        // 1️⃣ Auth check
+        // Auth check
         if (userSession == null ||
                 MessageConstants.USER_ANONYMOUS.equals(userSession.getUsername())) {
             responder.sendError(session, MessageConstants.ERR_NOT_LOGGED_IN);
             return;
         }
 
-        // 2️⃣ Arg check
-        String targetUser = result.getArgument();
-        if (targetUser == null || targetUser.isBlank()) {
-            responder.sendError(session,
-                    String.format(MessageConstants.ERR_MISSING_ARG_USER, "/select"));
+        // Validate input: /join #room
+        String argument = result.getArgument();
+        if (argument == null || argument.isBlank()) {
+            responder.sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
+            return;
+        }
+        String roomId = argument.trim();
+        if (roomId.isEmpty()) {
+            responder.sendError(session, MessageConstants.ERR_ROOM_REQUIRED);
             return;
         }
 
-        // 3️⃣ Username format
-        if (targetUser.trim().contains(" ")) {
-            responder.sendError(session, MessageConstants.ERR_USERNAME_CONTAIN_SPACE);
+        if (!roomId.startsWith("#") || roomId.length() <= 1) {
+            responder.sendError(session, MessageConstants.ERR_INVALID_ROOM_FORMAT);
             return;
         }
 
-        // 4️⃣ Self chat
-        String currentUser = userSession.getUsername();
-        if (targetUser.equals(currentUser)) {
-            responder.sendError(session, MessageConstants.ERR_SELF_CHAT);
-            return;
+        switch (userSession.getContext()) {
+            case PRIVATE -> privateChatRegistry.removeTarget(sessionId);
+
+            case ROOM -> roomRegistry.leaveCurrentRoom(sessionId);
+
+            case GLOBAL -> {
+                // no-op
+            }
         }
 
-        // 5️⃣ Online check & switch
-        if (!userRegistry.isUserOnline(targetUser)) {
-            responder.sendError(session,
-                    String.format(MessageConstants.ERR_USER_OFFLINE, targetUser));
-            return;
-        }
+        roomRegistry.joinRoom(roomId, sessionId);
 
-        // 6️⃣ State transition
-        privateChatRegistry.setTarget(sessionId, targetUser);
-        userRegistry.updateContext(sessionId, ChatContext.PRIVATE);
+        userRegistry.updateContext(sessionId, ChatContext.ROOM);
 
         responder.sendSystem(session,
-                String.format(MessageConstants.MSG_PRIVATE_CHAT_START, targetUser));
+                String.format(MessageConstants.MSG_ROOM_JOIN, roomId));
+
     }
 }

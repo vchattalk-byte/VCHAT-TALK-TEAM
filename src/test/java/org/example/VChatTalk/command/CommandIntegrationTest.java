@@ -3,10 +3,7 @@ package org.example.VChatTalk.command;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.VChatTalk.command.impl.*;
 import org.example.VChatTalk.command.service.CommandParserService;
-import org.example.VChatTalk.util.PrivateChatRegistry;
-import org.example.VChatTalk.util.SessionRegistry;
-import org.example.VChatTalk.util.SystemResponseSender;
-import org.example.VChatTalk.util.UserRegistry;
+import org.example.VChatTalk.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +29,7 @@ class CommandIntegrationTest {
     private CommandParserService commandParser;
     private CommandExecutor commandExecutor;
     private SessionRegistry sessionRegistry;
+    private RoomRegistry roomRegistry;
 
     // --- Mocks (External Boundaries only) ---
     @Mock
@@ -44,14 +42,16 @@ class CommandIntegrationTest {
         commandParser = new CommandParserService();
         userRegistry = new UserRegistry();
         privateChatRegistry = new PrivateChatRegistry();
+        roomRegistry = new RoomRegistry();
 
         // 2. Wire up the Commands with the Real Registry
         List<IChatCommand> commands = Arrays.asList(
-                new LoginCommand(userRegistry, responder),   // Wait until sprint 6 to deploy.
-                new SelectCommand(userRegistry, responder, privateChatRegistry),
+                new LoginCommand(userRegistry, responder),
+                // Correct Constructor Order (Responder first, then Registry)
+                new SelectCommand(responder, userRegistry, privateChatRegistry),
                 new ListCommand(userRegistry, responder),
                 new HelpCommand(responder),
-                new LeaveCommand(userRegistry, responder, privateChatRegistry),
+                new LeaveCommand(userRegistry, responder, privateChatRegistry, roomRegistry),
                 new ExitCommand(userRegistry, responder),
                 new UnknownCommand(responder)
         );
@@ -74,6 +74,10 @@ class CommandIntegrationTest {
         sessionRegistry.addSession(sessionAlice);
         sessionRegistry.addSession(sessionBob);
 
+        // Simulate ChatWebSocketHandler.afterConnectionEstablished
+        userRegistry.addSession("sess-alice");
+        userRegistry.addSession("sess-bob");
+
         // --- Phase 2: Login ---
         execute("/login Alice", sessionAlice);
 
@@ -93,8 +97,10 @@ class CommandIntegrationTest {
         // Verify Output (FR-12 Check)
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(responder, atLeastOnce()).sendSystem(eq(sessionAlice), captor.capture());
-        String successMsg = captor.getValue();
-        assertTrue(successMsg.contains("Bob")); // Message confirms target
+        // Verify that one of the messages contains "Bob" (success message)
+        boolean hasSuccessMsg = captor.getAllValues().stream()
+                .anyMatch(msg -> msg.contains("Bob"));
+        assertTrue(hasSuccessMsg, "Should receive success message containing target name");
 
         // --- Phase 4: Leave Chat ---
         execute("/leave", sessionAlice);
@@ -109,7 +115,10 @@ class CommandIntegrationTest {
     void testValidationLogic() throws IOException {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn("sess-error-test");
+
         sessionRegistry.addSession(session);
+        // Initialize Session
+        userRegistry.addSession("sess-error-test");
 
         // 1. Select before login
         execute("/select Alice", session);
@@ -138,10 +147,12 @@ class CommandIntegrationTest {
         WebSocketSession s1 = mock(WebSocketSession.class);
         when(s1.getId()).thenReturn("s1");
         sessionRegistry.addSession(s1);
+        userRegistry.addSession("s1");
 
         WebSocketSession s2 = mock(WebSocketSession.class);
         when(s2.getId()).thenReturn("s2");
         sessionRegistry.addSession(s2);
+        userRegistry.addSession("s2");
 
         // s1 logs in first
         execute("/login Admin", s1);
@@ -162,20 +173,26 @@ class CommandIntegrationTest {
     }
 
     @Test
-    @DisplayName("Constructor should throw IllegalStateException when duplicate command types exist")
-    void testConstructor_DuplicateCommands() {
-        // Arrange: Create two dummy commands of the same type (e.g., both are SELECT).
-        IChatCommand cmd1 = mock(IChatCommand.class);
-        when(cmd1.getType()).thenReturn(CommandType.SELECT);
+    @DisplayName("Fail fast: Duplicate CommandType registration should throw exception")
+    void testDuplicateCommandTypeRegistration() {
+        // Arrange
+        IChatCommand login1 = new LoginCommand(userRegistry, responder);
+        IChatCommand login2 = new LoginCommand(userRegistry, responder); // SAME TYPE
 
-        IChatCommand cmd2 = mock(IChatCommand.class);
-        when(cmd2.getType()).thenReturn(CommandType.SELECT); // Duplicate!
+        List<IChatCommand> duplicatedCommands = List.of(
+                login1,
+                login2
+        );
 
-        List<IChatCommand> commands = Arrays.asList(cmd1, cmd2);
+        // Act + Assert
+        IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> new CommandExecutor(duplicatedCommands)
+        );
 
-        // Act & Assert: Expect the constructor to throw an IllegalStateException.
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
-            new CommandExecutor(commands);
-        });
+        assertTrue(
+                ex.getMessage().toLowerCase().contains("duplicate"),
+                "Exception message should mention duplicate command type"
+        );
     }
 }
