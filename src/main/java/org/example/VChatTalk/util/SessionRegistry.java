@@ -29,18 +29,21 @@ public class SessionRegistry {
 
     // ========== BACKWARD COMPATIBLE METHODS ==========
 
-    public void addSession(WebSocketSession session){
-        if(session != null && session.getId()!=null){
-            webSocketSessions.put(session.getId(),session);
+    public void addSession(WebSocketSession session) {
+        if (session != null && session.getId() != null) {
+            webSocketSessions.put(session.getId(), session);
+            createChatSession(session); // Auto-create ChatSession
+            logger.debug("Added session and auto-created ChatSession: {}", session.getId());
         }
-
     }
 
     public void removeSession(String sessionId) {
         if (sessionId == null) return;
-        webSocketSessions.remove(sessionId);
 
-        logger.info("Removed session {}", sessionId);
+        webSocketSessions.remove(sessionId);
+        chatSessions.remove(sessionId); // Remove from both maps
+
+        logger.info("Removed session from both registries: {}", sessionId);
     }
 
     public WebSocketSession findSessionById(String sessionId){
@@ -57,25 +60,7 @@ public class SessionRegistry {
     // ========== NEW ABSTRACTION METHODS ==========
 
     /**
-     * New method: Register WebSocketSession as ChatSession
-     */
-    public void register(WebSocketSession webSocketSession) {
-        // Backward compatibility: Also add to original map
-        addSession(webSocketSession);
-
-        // Create and store ChatSession abstraction
-        ChatSession chatSession = new WebSocketChatSession(
-                webSocketSession,
-                userRegistry,
-                objectMapper
-        );
-        chatSessions.put(webSocketSession.getId(), chatSession);
-
-        logger.debug("Registered ChatSession for {}", webSocketSession.getId());
-    }
-
-    /**
-     * New method: Find ChatSession by ID
+     * Find ChatSession by ID
      */
     public ChatSession findChatSessionById(String sessionId) {
         if (sessionId == null) {
@@ -85,42 +70,54 @@ public class SessionRegistry {
     }
 
     /**
-     * New method: Get all ChatSessions
+     * Get all ChatSessions
      */
     public Collection<ChatSession> getAllChatSessions() {
         return Collections.unmodifiableCollection(chatSessions.values());
     }
 
     /**
-     * New method: Check if session exists
+     * Check if session exists in either registry
      */
     public boolean hasSession(String sessionId) {
         return webSocketSessions.containsKey(sessionId) || chatSessions.containsKey(sessionId);
     }
 
     /**
-     * New method: Remove ChatSession only
+     * Remove ChatSession only (for specific cleanup)
      */
     public void removeChatSession(String sessionId) {
         chatSessions.remove(sessionId);
+        logger.debug("Removed ChatSession only: {}", sessionId);
     }
 
-    // ========== PRIVATE HELPER ==========
+    // ========== PRIVATE HELPER METHODS ==========
 
     /**
      * Internal method to create ChatSession from WebSocketSession
      */
-    private void registerAsChatSession(WebSocketSession webSocketSession) {
+    private void createChatSession(WebSocketSession webSocketSession) {
+        if (webSocketSession == null || webSocketSession.getId() == null) {
+            return;
+        }
+
+        // Check if already exists
+        if (chatSessions.containsKey(webSocketSession.getId())) {
+            logger.debug("ChatSession already exists for: {}", webSocketSession.getId());
+            return;
+        }
+
         ChatSession chatSession = new WebSocketChatSession(
                 webSocketSession,
                 userRegistry,
                 objectMapper
         );
         chatSessions.put(webSocketSession.getId(), chatSession);
+        logger.debug("Created ChatSession for: {}", webSocketSession.getId());
     }
 
     /**
-     * Original method - kept for compatibility
+     * Log session counts for debugging
      */
     public void countSessions() {
         logger.info("WebSocket Sessions: {}, ChatSessions: {}",
@@ -128,4 +125,14 @@ public class SessionRegistry {
                 chatSessions.size());
     }
 
+    /**
+     * Get statistics about sessions
+     */
+    public Map<String, Object> getSessionStats() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("webSocketSessions", webSocketSessions.size());
+        stats.put("chatSessions", chatSessions.size());
+        stats.put("sessionIds", new ArrayList<>(webSocketSessions.keySet()));
+        return stats;
+    }
 }
